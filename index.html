@@ -173,6 +173,15 @@
             </div>
 
             <div class="absolute top-4 right-4 z-10 hidden lg:flex gap-2">
+                <div class="flex items-center bg-white/80 backdrop-blur border border-slate-200 rounded-md shadow-sm overflow-hidden" title="Cỡ chữ &amp; giao diện GeoGebra (phóng to toàn bộ applet — GeoGebra không hỗ trợ chỉnh riêng cỡ chữ)">
+                    <button id="btnFontSizeDown" class="w-8 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-colors" title="Giảm cỡ chữ">
+                        <i class="fa-solid fa-minus text-xs"></i>
+                    </button>
+                    <span id="fontSizeLabel" class="px-1.5 text-xs font-semibold text-slate-700 tabular-nums min-w-[38px] text-center">100%</span>
+                    <button id="btnFontSizeUp" class="w-8 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-colors" title="Tăng cỡ chữ">
+                        <i class="fa-solid fa-plus text-xs"></i>
+                    </button>
+                </div>
                 <button id="btnResetView" class="px-3 py-2 bg-white/80 backdrop-blur border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-md shadow-sm transition-all flex items-center gap-2 text-sm font-medium" title="Đặt lại góc nhìn">
                     <i class="fa-solid fa-compress"></i> <span>Căn giữa</span>
                 </button>
@@ -621,6 +630,11 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         let currentStepIndex = 0;
         let stepModeActive = false;
 
+        // --- 3c. Trạng thái "Cỡ chữ" (phóng to toàn bộ applet qua tham số "scale" khi khởi tạo) ---
+        const FONT_SCALE_STEPS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5];
+        let fontScaleIndex = 1; // 1 = 100% (mặc định)
+        let currentScale = FONT_SCALE_STEPS[fontScaleIndex];
+
         // --- 4. Cấu hình và Khởi tạo GeoGebra Applet ---
         function initApplet() {
             const container = document.getElementById('ggb-element');
@@ -645,6 +659,12 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
                 "perspective": currentMode === '3d' ? "AT" : "AG",
                 "width": container.clientWidth || (window.innerWidth > 1024 ? (window.innerWidth * 5/6) : window.innerWidth),
                 "height": container.clientHeight || window.innerHeight,
+                // GeoGebra không có API/lệnh riêng để chỉnh cỡ chữ của khung nhìn đồ họa (đã kiểm
+                // tra tài liệu chính thức: không có setFontSize/SetFontSize nào tồn tại). "scale"
+                // là tham số CHÍNH THỨC duy nhất phóng to mọi thứ trong applet (chữ, nhãn, nút,
+                // toolbar) theo cùng 1 tỉ lệ -> dùng để làm "Cỡ chữ" cho công cụ, áp dụng khi khởi
+                // tạo applet (nên khi đổi cỡ chữ phải initApplet() lại, xem applyFontScale()).
+                "scale": currentScale,
                 "showMenuBar": true,
                 "showAlgebraInput": true,
                 "showToolBar": true,
@@ -673,7 +693,11 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
                         pendingRestoreBase64 = null;
                         pendingRestoreName = '';
                         ggbAppletAPI.setBase64(b64, function() {
-                            showStatus(`Đã khôi phục "${nm}" (kèm chỉnh sửa tay đã lưu).`);
+                            // nm rỗng = applet được tải lại chỉ để đổi cỡ chữ (xem applyFontScale),
+                            // không phải nạp 1 mục thư viện -> đổi thông báo cho đúng ngữ cảnh.
+                            showStatus(nm
+                                ? `Đã khôi phục "${nm}" (kèm chỉnh sửa tay đã lưu).`
+                                : `Đã áp dụng cỡ chữ ${Math.round(currentScale * 100)}%.`);
                         });
                     } else {
                         runScript();
@@ -1204,6 +1228,53 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         const btnExportPngMobile = document.getElementById('btnExportPngMobile');
         if (btnExportPng) btnExportPng.addEventListener('click', exportPng);
         if (btnExportPngMobile) btnExportPngMobile.addEventListener('click', exportPng);
+
+        // --- 6d. Cỡ chữ (phóng to/thu nhỏ toàn bộ applet GeoGebra) ---
+        const btnFontSizeDown = document.getElementById('btnFontSizeDown');
+        const btnFontSizeUp = document.getElementById('btnFontSizeUp');
+        const fontSizeLabel = document.getElementById('fontSizeLabel');
+
+        function updateFontSizeLabel() {
+            if (fontSizeLabel) fontSizeLabel.textContent = Math.round(currentScale * 100) + '%';
+            if (btnFontSizeDown) btnFontSizeDown.disabled = fontScaleIndex <= 0;
+            if (btnFontSizeUp) btnFontSizeUp.disabled = fontScaleIndex >= FONT_SCALE_STEPS.length - 1;
+        }
+
+        function applyFontScale(newIndex) {
+            const clamped = Math.max(0, Math.min(FONT_SCALE_STEPS.length - 1, newIndex));
+            if (clamped === fontScaleIndex) return;
+            fontScaleIndex = clamped;
+            currentScale = FONT_SCALE_STEPS[fontScaleIndex];
+            updateFontSizeLabel();
+
+            if (!ggbAppletAPI) return; // Chưa có applet -> giá trị currentScale sẽ tự được dùng ở lần initApplet() đầu tiên
+
+            hideStepModeUI();
+            showStatus('Đang áp dụng cỡ chữ mới...');
+            try {
+                // GeoGebra chỉ nhận "scale" lúc KHỞI TẠO applet (không đổi được khi đang chạy) nên
+                // phải chụp lại đúng trạng thái đang vẽ (kể cả chỉnh tay) rồi khởi tạo lại applet ở
+                // scale mới và khôi phục ngay — tái dùng đúng cơ chế pendingRestoreBase64 đã có sẵn
+                // cho việc nạp thư viện, để không làm mất hình đang dựng dở trên màn hình.
+                ggbAppletAPI.getBase64(function(b64) {
+                    pendingRestoreBase64 = b64 || null;
+                    pendingRestoreName = '';
+                    if (!b64) {
+                        // Hiếm khi xảy ra, nhưng nếu không lấy được trạng thái thì đành chạy lại mã gốc
+                        initApplet();
+                        return;
+                    }
+                    initApplet();
+                });
+            } catch (err) {
+                console.error(err);
+                showStatus('Lỗi khi đổi cỡ chữ.', true);
+            }
+        }
+
+        if (btnFontSizeUp) btnFontSizeUp.addEventListener('click', () => applyFontScale(fontScaleIndex + 1));
+        if (btnFontSizeDown) btnFontSizeDown.addEventListener('click', () => applyFontScale(fontScaleIndex - 1));
+        updateFontSizeLabel();
 
         // --- 7. Chức năng Fullscreen (Trình chiếu) ---
         const geogebraSection = document.getElementById('geogebra-section');
