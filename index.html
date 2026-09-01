@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GeoGebra AI Script Thầy Vũ Tiến Lực - THPT Nguyễn Hữu Cảnh</title>
+    <title>GeoGebra AI Script Runner</title>
     <!-- Tailwind CSS cho giao diện -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome cho icon -->
@@ -65,7 +65,7 @@
             <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-inner">
                 <i class="fa-solid fa-shapes"></i>
             </div>
-            <h1 class="text-lg font-bold text-slate-800 tracking-tight">GeoGebra <span class="text-brand-600">AI Thầy Vũ Tiến Lực - THPT Nguyễn Hữu Cảnh</span></h1>
+            <h1 class="text-lg font-bold text-slate-800 tracking-tight">GeoGebra <span class="text-brand-600">AI Runner</span></h1>
         </div>
         <div class="flex items-center gap-4">
             <div class="text-sm text-slate-500 hidden lg:block">
@@ -111,6 +111,9 @@
                     </button>
                     <button id="btnInsertText" class="px-2 py-1 text-xs font-medium text-white bg-sky-600 hover:bg-sky-700 rounded-md shadow-sm transition-colors flex items-center gap-1" title="Chèn văn bản / công thức vào màn hình (không cần tự viết lệnh Text)">
                         <i class="fa-solid fa-font"></i>
+                    </button>
+                    <button id="btnInsertCode" class="px-2 py-1 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition-colors flex items-center gap-1" title="Chèn thêm mã vẽ vào CÙNG hình đang có (không xóa hình cũ)">
+                        <i class="fa-solid fa-layer-group"></i>
                     </button>
                 </div>
             </div>
@@ -280,6 +283,28 @@
             <div class="flex justify-end gap-2 mt-2">
                 <button id="textModalCancel" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">Hủy</button>
                 <button id="textModalInsert" class="px-3 py-1.5 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-md transition-colors">Chèn</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Chèn thêm mã vẽ vào CÙNG hình đang có (không xóa hình cũ) -->
+    <div id="codeModalOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-xl p-4">
+            <h3 class="text-sm font-semibold text-slate-800 mb-1 flex items-center gap-2">
+                <i class="fa-solid fa-layer-group text-indigo-600"></i> Chèn thêm mã vẽ vào cùng hình
+            </h3>
+            <p class="text-[11px] text-slate-500 mb-3">Dán thêm 1 đoạn mã GeoGebra khác (VD: mô hình vật lý, chú thích, hình phụ...) — hình đang có trên màn hình được GIỮ NGUYÊN, đoạn mã mới sẽ vẽ chồng thêm lên trên, đồng thời được nối vào cuối ô Code để lần "Chạy" sau vẫn còn.</p>
+
+            <textarea id="codeModalInput" rows="12" class="w-full border border-slate-300 rounded-md px-3 py-2 text-xs code-font mb-2 focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="// Dán đoạn mã GeoGebra cần chèn thêm vào đây..."></textarea>
+
+            <p class="text-[10.5px] text-amber-600 mb-2">
+                <i class="fa-solid fa-circle-info"></i> Lưu ý: nếu đoạn mã mới đặt tên đối tượng TRÙNG với tên đã dùng trong hình hiện tại (VD cả 2 đoạn mã đều có biến "A"), GeoGebra sẽ hiểu là định nghĩa lại đối tượng đó — nên đổi tên biến ở đoạn mã mới nếu muốn cả 2 hình cùng tồn tại độc lập.
+            </p>
+            <p id="codeModalError" class="text-[11px] text-red-500 mb-2 hidden">Vui lòng dán mã cần chèn.</p>
+
+            <div class="flex justify-end gap-2 mt-2">
+                <button id="codeModalCancel" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">Hủy</button>
+                <button id="codeModalInsert" class="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors">Chèn vào hình</button>
             </div>
         </div>
     </div>
@@ -1764,17 +1789,28 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
 
         // Nối (các) dòng lệnh vừa sinh vào CUỐI ô mã (kèm 1 dòng comment đánh dấu), để lần "Chạy"
         // toàn bộ sau này vẫn giữ được văn bản vừa chèn — không chỉ chạy 1 lần rồi mất khi Chạy lại.
-        function insertGeneratedLinesIntoScript(commandLines) {
-            const block = '// Chèn văn bản\n' + commandLines.join('\n');
+        // Nối 1 khối mã (kèm dòng comment đánh dấu, nếu có) vào CUỐI ô Code, cách khối cũ đúng 1
+        // dòng trống — để (1) lần "Chạy" toàn bộ sau này vẫn dựng lại đủ cả phần mới thêm, và
+        // (2) khối mới tự thành 1 "bước" riêng khi dùng Trình chiếu từng bước (mỗi khối cách nhau
+        // bởi dòng trống = 1 bước).
+        function appendBlockToScript(label, rawText) {
+            const block = (label ? '// ' + label + '\n' : '') + rawText.replace(/\s+$/, '');
             const current = scriptInput.value;
             scriptInput.value = current.trim() ? current.replace(/\s+$/, '') + '\n\n' + block + '\n' : block + '\n';
         }
 
+        function insertGeneratedLinesIntoScript(commandLines) {
+            appendBlockToScript('Chèn văn bản', commandLines.join('\n'));
+        }
+
         // Chạy NGAY (các) dòng vừa thêm bằng evalCommand, KHÔNG reset()/newConstruction() lại toàn
         // bộ — để giữ nguyên mọi thứ đã có sẵn trên màn hình, chỉ thêm văn bản mới vào.
-        function runAdditionalLines(commandLines) {
+        // Chạy 1 đoạn mã (chuỗi nhiều dòng, CHƯA qua tiền xử lý) bằng evalCommand, KHÔNG
+        // reset()/newConstruction() lại toàn bộ — giữ nguyên mọi thứ đã có sẵn trên màn hình,
+        // chỉ thêm/áp dụng thêm đoạn mã mới. Dùng chung cho cả "Chèn văn bản" và "Chèn thêm mã vẽ".
+        function runAdditionalScript(rawText) {
             if (!ggbAppletAPI) return { successCount: 0, failCount: 0, failedLines: [] };
-            const processed = preprocessGGBScript(commandLines.join('\n'));
+            const processed = preprocessGGBScript(rawText);
             const lines = processed.split('\n');
             let successCount = 0, failCount = 0;
             const failedLines = [];
@@ -1785,6 +1821,10 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
                 }
             }
             return { successCount, failCount, failedLines };
+        }
+
+        function runAdditionalLines(commandLines) {
+            return runAdditionalScript(commandLines.join('\n'));
         }
 
         function confirmTextModal() {
@@ -1825,6 +1865,59 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         textModalInput.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeTextModal();
             // Không bắt phím Enter để "Chèn" luôn — đây là ô nhiều dòng, Enter phải xuống dòng bình thường.
+        });
+
+        // --- Modal "Chèn thêm mã vẽ vào cùng hình" (không xóa hình đang có) ---
+        const btnInsertCode = document.getElementById('btnInsertCode');
+        const codeModalOverlay = document.getElementById('codeModalOverlay');
+        const codeModalInput = document.getElementById('codeModalInput');
+        const codeModalError = document.getElementById('codeModalError');
+        const codeModalCancel = document.getElementById('codeModalCancel');
+        const codeModalInsert = document.getElementById('codeModalInsert');
+
+        function openCodeModal() {
+            if (!ggbAppletAPI) { showStatus('GeoGebra chưa tải xong, chưa thể chèn mã!', true); return; }
+            codeModalInput.value = '';
+            codeModalError.classList.add('hidden');
+            codeModalOverlay.classList.remove('hidden');
+            codeModalOverlay.classList.add('flex');
+            codeModalInput.focus();
+        }
+
+        function closeCodeModal() {
+            codeModalOverlay.classList.add('hidden');
+            codeModalOverlay.classList.remove('flex');
+        }
+
+        function confirmCodeModal() {
+            const raw = codeModalInput.value;
+            if (!raw.trim()) { codeModalError.classList.remove('hidden'); codeModalInput.focus(); return; }
+            codeModalError.classList.add('hidden');
+
+            // Đang trình chiếu từng bước thì thoát trước — thêm đối tượng mới sẽ làm lệch các
+            // "mốc bước" đã tính (xem stepBoundaries trong enterStepMode()).
+            hideStepModeUI();
+
+            appendBlockToScript('Chèn thêm mã vẽ', raw);
+            const { successCount, failCount, failedLines } = runAdditionalScript(raw);
+
+            closeCodeModal();
+
+            if (failCount > 0) {
+                statusText.title = 'Các dòng lỗi:\n' + failedLines.join('\n');
+                showStatus(`Đã thêm vào mã, nhưng ${failCount} dòng lỗi khi vẽ (kiểm tra trùng tên đối tượng?).`, true);
+            } else {
+                statusText.title = '';
+                showStatus(`Đã chèn thêm mã vẽ vào hình (${successCount} lệnh chạy thành công).`);
+            }
+        }
+
+        btnInsertCode.addEventListener('click', openCodeModal);
+        codeModalCancel.addEventListener('click', closeCodeModal);
+        codeModalInsert.addEventListener('click', confirmCodeModal);
+        codeModalOverlay.addEventListener('click', (e) => { if (e.target === codeModalOverlay) closeCodeModal(); });
+        codeModalInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeCodeModal();
         });
 
         // --- Đồng bộ Google Sheet qua Google Apps Script Web App ---
