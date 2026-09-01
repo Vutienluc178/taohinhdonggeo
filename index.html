@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoGebra AI Script Runner</title>
+    <!-- Tailwind CSS cho giao diện -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome cho icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Thư viện GeoGebra API -->
+    <script src="https://www.geogebra.org/apps/deployggb.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .code-font { font-family: 'Fira Code', monospace; }
+        
+        /* Custom scrollbar cho editor */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        /* Đảm bảo phần tử khi full màn hình sẽ phủ kín */
+        #geogebra-section:fullscreen {
+            width: 100vw !important;
+            height: 100vh !important;
+            background-color: white !important;
+        }
+        #geogebra-section:-webkit-full-screen {
+            width: 100vw !important;
+            height: 100vh !important;
+            background-color: white !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen w-screen overflow-hidden flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center shrink-0 shadow-sm z-10">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-inner">
+                <i class="fa-solid fa-shapes"></i>
+            </div>
+            <h1 class="text-lg font-bold text-slate-800 tracking-tight">GeoGebra <span class="text-brand-600">AI Runner</span></h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-sm text-slate-500 hidden lg:block">
+                <i class="fa-solid fa-lightbulb text-amber-500 mr-1"></i> Tự động biên dịch cú pháp thông thường sang GeoGebra Script
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <a href="https://gemini.google.com/gem/1cdmcD4ateFUaaS99ZI4wipvtEXh5hLVl?usp=sharing" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition-colors flex items-center gap-1.5" title="Mở Gem tạo mã 1 trên Gemini (tab mới)">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> <span class="hidden md:inline">Gem tạo mã 1</span>
+                </a>
+                <a href="https://gemini.google.com/gem/1bVkuk2bg827bGhaCTKPTf7nMbfKxKghC?usp=sharing" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition-colors flex items-center gap-1.5" title="Mở Gem tạo mã 2 trên Gemini (tab mới)">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> <span class="hidden md:inline">Gem tạo mã 2</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden w-full h-full relative">
+        
+        <!-- Cột trái: Trình soạn thảo và Ví dụ -->
+        <section class="w-full lg:w-1/6 h-1/2 lg:h-full flex flex-col bg-slate-50 border-r border-slate-200 z-0">
+            <!-- Toolbar của Editor -->
+            <div class="bg-white border-b border-slate-200 px-4 py-3 flex justify-between items-center shrink-0 flex-wrap gap-2">
+                <h2 class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <i class="fa-solid fa-code text-brand-600"></i> Code
+                </h2>
+                <div class="flex gap-2 items-center flex-wrap">
+                    <select id="modeSelect" class="text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200 hover:bg-slate-200 rounded-md px-1.5 py-1 transition-colors focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer">
+                        <option value="classic">2D</option>
+                        <option value="3d">3D</option>
+                    </select>
+                    <button id="btnRun" class="px-2 py-1 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md shadow-sm transition-colors flex items-center gap-1" title="Chạy Script">
+                        <i class="fa-solid fa-play"></i> Chạy
+                    </button>
+                    <button id="btnClear" class="px-2 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors flex items-center gap-1" title="Xóa trắng mã">
+                        <i class="fa-solid fa-eraser"></i>
+                    </button>
+                    <button id="btnSaveToLibrary" class="px-2 py-1 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-md shadow-sm transition-colors flex items-center gap-1" title="Lưu mã hiện tại vào thư viện">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Textarea -->
+            <div class="flex-1 relative bg-white">
+                <textarea id="scriptInput" class="w-full h-full p-4 resize-none outline-none code-font text-sm text-slate-800 bg-[#fafafa] focus:bg-white transition-colors" placeholder="Nhập mã GeoGebra của bạn ở đây...&#10;Ví dụ:&#10;A = (1, 2)&#10;B = (4, 5)&#10;Polygon(A, B, 4)"></textarea>
+
+                <!-- Status bar nhỏ ở dưới editor -->
+                <div id="statusBar" class="absolute bottom-0 left-0 right-0 bg-slate-100 border-t border-slate-200 px-4 py-1.5 text-[11px] text-slate-500 flex justify-between">
+                    <span id="statusText"><i class="fa-solid fa-check-circle text-green-500 mr-1"></i> Sẵn sàng</span>
+                    <span>Hỗ trợ: Ctrl + Enter để chạy</span>
+                </div>
+            </div>
+
+            <!-- Khu vực Ví dụ / Thư viện -->
+            <div class="h-2/5 min-h-[190px] bg-white border-t border-slate-200 flex flex-col shrink-0">
+                <div class="flex border-b border-slate-100 bg-slate-50 shrink-0">
+                    <button id="tabExamples" class="flex-1 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-brand-700 border-b-2 border-brand-600 transition-colors">
+                        Ví dụ mẫu
+                    </button>
+                    <button id="tabLibrary" class="flex-1 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b-2 border-transparent hover:text-slate-700 transition-colors">
+                        Thư viện <span id="libCount" class="ml-0.5 text-slate-400">(0)</span>
+                    </button>
+                </div>
+
+                <div class="overflow-y-auto p-2 flex-1" id="examplesContainer">
+                    <!-- Danh sách ví dụ sẽ được render bằng JS -->
+                </div>
+
+                <div class="overflow-y-auto p-2 flex-1 hidden flex-col" id="libraryPane">
+                    <div class="flex gap-1 mb-2 shrink-0">
+                        <button id="btnSyncSheet" class="flex-1 px-2 py-1.5 text-[11px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors flex items-center justify-center gap-1" title="Tải lại thư viện từ Google Sheet">
+                            <i class="fa-solid fa-rotate"></i> Tải lại
+                        </button>
+                        <button id="btnSheetSettings" class="flex-1 px-2 py-1.5 text-[11px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors flex items-center justify-center gap-1" title="Cài đặt kết nối Google Sheet">
+                            <i class="fa-solid fa-gear"></i> Kết nối Sheet
+                        </button>
+                    </div>
+                    <div id="sheetSyncStatus" class="text-[10px] text-slate-400 mb-2 shrink-0 truncate">Chưa cấu hình Google Sheet.</div>
+                    <div id="libraryContainer" class="flex-1"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Cột phải: Khu vực hiển thị GeoGebra -->
+        <section id="geogebra-section" class="w-full lg:w-5/6 h-1/2 lg:h-full relative flex flex-col bg-white">
+            <div class="bg-white border-b border-slate-200 px-4 py-3 flex justify-between items-center shrink-0 lg:hidden">
+                 <h2 class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <i class="fa-solid fa-eye text-brand-600"></i> Kết quả
+                </h2>
+                <div class="flex gap-2">
+                    <button id="btnFullscreenMobile" class="px-3 py-1.5 text-xs font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-md transition-colors" title="Trình chiếu">
+                        <i class="fa-solid fa-expand"></i>
+                    </button>
+                    <button id="btnResetViewMobile" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
+                        Reset View
+                    </button>
+                </div>
+            </div>
+            
+            <div class="absolute top-4 right-4 z-10 hidden lg:flex gap-2">
+                <button id="btnResetView" class="px-3 py-2 bg-white/80 backdrop-blur border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-md shadow-sm transition-all flex items-center gap-2 text-sm font-medium" title="Đặt lại góc nhìn">
+                    <i class="fa-solid fa-compress"></i> <span>Căn giữa</span>
+                </button>
+                <button id="btnFullscreen" class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-md shadow-sm transition-all flex items-center gap-2 text-sm font-medium" title="Trình chiếu toàn màn hình">
+                    <i class="fa-solid fa-expand"></i> <span>Trình chiếu</span>
+                </button>
+            </div>
+
+            <!-- Div chứa applet -->
+            <div id="ggb-element" class="flex-1 w-full h-full bg-white z-0"></div>
+        </section>
+
+    </main>
+
+    <!-- Modal: Đặt tên / Đổi tên khi lưu vào thư viện -->
+    <div id="nameModalOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-xs p-4">
+            <h3 id="nameModalTitle" class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-floppy-disk text-emerald-600"></i> Lưu vào thư viện
+            </h3>
+            <label class="block text-[11px] font-medium text-slate-500 mb-1">Lớp</label>
+            <select id="gradeModalSelect" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm mb-3 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer">
+                <option value="10">Lớp 10</option>
+                <option value="11">Lớp 11</option>
+                <option value="12">Lớp 12</option>
+                <option value="Khác">Khác</option>
+            </select>
+            <label class="block text-[11px] font-medium text-slate-500 mb-1">Tên hình ảnh</label>
+            <input id="nameModalInput" type="text" maxlength="80" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm mb-1 focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="VD: Tam giác nội tiếp đường tròn" />
+            <p id="nameModalError" class="text-[11px] text-red-500 mb-2 hidden">Vui lòng nhập tên.</p>
+            <div class="flex justify-end gap-2 mt-2">
+                <button id="nameModalCancel" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">Hủy</button>
+                <button id="nameModalSave" class="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md transition-colors">Lưu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Cài đặt kết nối Google Sheet -->
+    <div id="settingsModalOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-5 max-h-[85vh] overflow-y-auto">
+            <h3 class="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                <i class="fa-solid fa-table-cells text-brand-600"></i> Kết nối Google Sheet
+            </h3>
+            <p class="text-xs text-slate-500 mb-3">Dùng Google Apps Script làm cầu nối để lưu &amp; đồng bộ thư viện code lên Google Sheet của bạn — không cần server riêng.</p>
+
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Web App URL</label>
+            <input id="webAppUrlInput" type="text" placeholder="https://script.google.com/macros/s/..../exec" class="w-full border border-slate-300 rounded-md px-3 py-2 text-xs code-font mb-3 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+
+            <div class="flex gap-2 mb-4">
+                <button id="btnSaveUrl" class="flex-1 px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md transition-colors">Lưu URL &amp; tải dữ liệu</button>
+                <button id="btnClearUrl" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">Ngắt kết nối</button>
+            </div>
+
+            <details class="mb-3" open>
+                <summary class="text-xs font-semibold text-brand-700 cursor-pointer select-none">Chưa có Web App? Hướng dẫn tạo (5 bước, ~2 phút)</summary>
+                <ol class="text-xs text-slate-600 list-decimal pl-4 mt-2 space-y-1.5">
+                    <li>Mở <a href="https://sheets.google.com" target="_blank" rel="noopener" class="text-brand-600 underline">Google Sheets</a>, tạo một trang tính mới (đặt tên tùy ý, VD "Thư viện GeoGebra").</li>
+                    <li>Vào menu <b>Tiện ích mở rộng (Extensions) → Apps Script</b>.</li>
+                    <li>Xóa hết code mặc định trong file <span class="code-font">Code.gs</span>, dán toàn bộ đoạn mã bên dưới vào, rồi bấm biểu tượng Lưu 💾.</li>
+                    <li>Bấm <b>Triển khai (Deploy) → Triển khai mới (New deployment)</b>. Chọn loại <b>Ứng dụng web (Web app)</b>. Mục "Thực thi với quyền của" (Execute as) chọn <b>Tôi (Me)</b>, mục "Người có quyền truy cập" (Who has access) chọn <b>Bất kỳ ai (Anyone)</b>. Bấm <b>Triển khai</b> và cấp quyền khi được hỏi.</li>
+                    <li>Sao chép đường dẫn <b>Web app URL</b> vừa tạo, dán vào ô phía trên rồi bấm "Lưu URL &amp; tải dữ liệu".</li>
+                </ol>
+            </details>
+
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Mã Apps Script (dán vào Code.gs)</label>
+            <div class="relative">
+                <textarea id="appsScriptCode" readonly class="w-full h-44 border border-slate-300 rounded-md px-3 py-2 text-[10.5px] code-font bg-slate-50 mb-1 leading-relaxed"></textarea>
+                <button id="btnCopyScript" class="absolute top-2 right-2 px-2 py-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 rounded shadow-sm transition-colors">
+                    <i class="fa-regular fa-copy"></i> Copy
+                </button>
+            </div>
+
+            <div class="flex justify-end mt-3">
+                <button id="btnCloseSettings" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Dữ liệu các ví dụ mẫu ---
+        const examples = [
+            {
+                title: "1. Tam giác cơ bản (2D)",
+                mode: "classic",
+                script: `A = (-2, -1)\nB = (4, -1)\nC = (1, 4)\n\n// Vẽ tam giác\ntamGiac = Polygon(A, B, C)\nSetColor(tamGiac, "Blue")\nSetFilling(tamGiac, 0.25)\n\n// Tính diện tích\nS = Area(tamGiac)\nText("Diện tích = " + S, (1, 2))`
+            },
+            {
+                title: "2. Đường tròn nội tiếp (2D)",
+                mode: "classic",
+                script: `A = (0, 3)\nB = (-4, -2)\nC = (4, -2)\nt1 = Polygon(A, B, C)\n\n// Tâm đường tròn nội tiếp = Tâm tam giác thứ 1 (Kimberling n = 1)\nI = TriangleCenter(A, B, C, 1)\n\n// Bán kính = khoảng cách từ tâm I đến cạnh AB\nr = Distance(I, Line(A, B))\n\n// Vẽ đường tròn nội tiếp\nc = Circle(I, r)\nSetColor(c, "Red")\nSetLineThickness(c, 3)`
+            },
+            {
+                title: "3. Hàm số có tham số (2D)",
+                mode: "classic",
+                script: `// Tạo thanh trượt a\na = Slider(-5, 5, 0.1, 1, 100, false, true, false, false)\nSetValue(a, 1)\n\n// Vẽ hàm số bậc 2\nf(x) = a * x^2 - 2x + 1\nSetColor(f, "Purple")\nSetLineThickness(f, 4)\n\n// Điểm cực trị\nE = Extremum(f)\nSetPointSize(E, 5)`
+            },
+            {
+                title: "4. Cắt Mặt Cầu bằng Mặt Phẳng (3D)",
+                mode: "3d",
+                script: `// 1. Khởi tạo tâm, mặt cầu (Cố định R = 5) và ẩn trục tọa độ
+I = (0, 0, 0)
+R = 5
+mat_cau = Sphere(I, R)
+SetColor(mat_cau, "Cyan")
+SetFilling(mat_cau, 0.1)
+ShowAxes(false)
+
+// 2. Tạo thanh trượt khoảng cách d và mặt phẳng cắt ngang
+d = Slider(-8, 8, 0.1, 1, 100, false, true, false, false)
+SetValue(d, 3)
+mat_phang = Plane(z = d)
+SetColor(mat_phang, "Orange")
+SetFilling(mat_phang, 0.4)
+
+// 3. Khởi tạo đường tròn giao tuyến
+giao_tuyen = Intersect(mat_cau, mat_phang)
+SetColor(giao_tuyen, "Red")
+SetLineThickness(giao_tuyen, 5)
+
+// 4. Xác định hình chiếu H và một điểm M bất kỳ trên giao tuyến
+H = (0, 0, d)
+M = Point(giao_tuyen)
+
+// 5. Dựng tam giác Pytago và các đoạn thẳng phụ trợ
+tam_giac = Polygon(I, H, M)
+SetColor(tam_giac, "Green")
+SetFilling(tam_giac, 0.2)
+doan_d = Segment(I, H)
+doan_r = Segment(H, M)
+doan_R = Segment(I, M)
+SetLineStyle(doan_d, 1)
+SetLineStyle(doan_r, 1)
+SetLineStyle(doan_R, 1)
+
+// 6. Tạo hộp kiểm tương tác sư phạm
+hien_thi = Checkbox("Hiện tam giác Pytago")
+SetValue(hien_thi, true)
+SetConditionToShowObject(tam_giac, hien_thi)
+SetConditionToShowObject(doan_d, hien_thi)
+SetConditionToShowObject(doan_r, hien_thi)
+SetConditionToShowObject(doan_R, hien_thi)
+SetConditionToShowObject(H, hien_thi)
+SetConditionToShowObject(M, hien_thi)
+
+// 7. Tạo văn bản động (Dynamic Text) cập nhật theo thời gian thực
+// Dùng Text (không dùng FormulaText vì lệnh này chỉ nhận 1 đối tượng có sẵn,
+// không nhận chuỗi ghép tự do bằng dấu +)
+txt_congthuc = Text("\\text{Khoảng cách: } d = " + d + " \\newline \\text{Bán kính mặt cầu: } R = " + R + " \\newline \\text{Bán kính giao tuyến: } r = \\sqrt{R^2 - d^2}", (-9, 8), true, true)`
+            },
+            {
+                title: "5. Quỹ đạo Ném bóng rổ (Animation)",
+                mode: "classic",
+                script: `# 1. Tạo các thanh trượt tham số (a, h, k) và biến thời gian t
+a = Slider[-0.2, -0.01, 0.001]
+h = Slider[0, 15, 0.1]
+k = Slider[2, 7, 0.1]
+t = Slider[0, 1, 0.01]
+
+# 2. Khai báo hàm số quỹ đạo bóng (Parabol)
+f(x) = a * (x - h)^2 + k
+SetColor[f, "Blue"]
+SetLineThickness[f, 5]
+
+# 3. Xác định các điểm quan trọng: Đỉnh parabol, điểm chạm đất và Rổ
+P_dinh = (h, k)
+SetCaption[P_dinh, "Đỉnh"]
+
+B_roi = Intersect[f, xAxis]
+SetCaption[B_roi, "Điểm chạm đất"]
+
+Tam_Ro = (10, 3)
+Ro = Circle[Tam_Ro, 0.4]
+SetColor[Ro, "Red"]
+SetFilling[Ro, 0.25]
+
+# 4. Tạo quả bóng di chuyển trên quỹ đạo theo thời gian t
+# Giả sử quỹ đạo bóng chiếu trên trục x kéo dài 12 đơn vị chiều dài
+P_bong = (12 * t, f(12 * t))
+Bong = Circle[P_bong, 0.3]
+SetColor[Bong, "Orange"]
+SetFilling[Bong, 0.8]
+
+# 5. Tạo văn bản động (Dynamic Text) sử dụng LaTeX và \\newline
+str_congthuc = "f(x) = a(x - h)^2 + k \\newline f(x) = " + a + "(x - " + h + ")^2 + " + k + " \\newline \\text{Tâm Rổ: } (10, 3)"
+Txt_GiaiThich = Text[str_congthuc, (6, 6), true, true]
+
+# 6. Nút bấm tương tác
+Nut_Nem = Button["Ném Bóng"]
+SetOnClick[Nut_Nem, "SetValue[t, 0] \\n StartAnimation[t]"]`
+            },
+            {
+                title: "6. Mặt tròn xoay (3D)",
+                mode: "3d",
+                script: `# 1. Khởi tạo thanh trượt điều khiển
+alpha = Slider[0, 2*pi, 0.01]
+x_0 = Slider[0, 4, 0.01]
+
+# 2. Khai báo hàm số gốc f(x)
+f(x) = sqrt(x)
+
+# 3. Tạo đường cong bị chặn trên đoạn [0, 4] bằng lệnh Function[]
+# Sử dụng ngoặc vuông cho lệnh Function, ngoặc đơn cho hàm số
+g = Function[f, 0, 4]
+SetColor[g, "Blue"]
+SetLineThickness[g, 5]
+
+# 4. Tạo mặt tròn xoay bằng lệnh Surface[] khi quay đường cong g quanh trục Ox
+# Trục Ox mặc định trong GGB được gọi là xAxis
+mat_xoay = Surface[g, alpha, xAxis]
+SetColor[mat_xoay, "Orange"]
+
+# 5. Tạo mô phỏng "Lát cắt" (Quỹ đạo 3D của điểm đang xét)
+# Điểm A nằm trên đường cong gốc
+A = (x_0, f(x_0), 0)
+SetColor[A, "Red"]
+SetPointSize[A, 5]
+
+# Quỹ đạo của A khi quay là đường tròn (viết dưới dạng tham số 3D bằng lệnh Curve[])
+lat_cat = Curve[x_0, f(x_0) * cos(t), f(x_0) * sin(t), t, 0, alpha]
+SetColor[lat_cat, "Red"]
+SetLineThickness[lat_cat, 3]
+
+# 6. Thiết lập Hộp kiểm (Checkbox) tương tác
+chk_LatCat = Checkbox["Hiển thị lát cắt cắt ngang", true]
+SetConditionToShowObject[lat_cat, chk_LatCat]
+SetConditionToShowObject[A, chk_LatCat]
+
+chk_MatXoay = Checkbox["Hiển thị bề mặt 3D", true]
+SetConditionToShowObject[mat_xoay, chk_MatXoay]
+
+# 7. Hộp văn bản động LaTeX sử dụng \\newline
+str_congthuc = "\\textbf{MẶT TRÒN XOAY} \\newline Đường sinh: f(x) = \\sqrt{x} \\newline Thể tích: V = \\pi \\int_{0}^{4} [f(x)]^2 dx = 8\\pi"
+txt_LyThuyet = Text[str_congthuc, (20, 20), true, true]
+
+# 8. Nút bấm tự động chạy hoạt ảnh
+btn_MoPhong = Button["Chạy mô phỏng xoay"]
+SetOnClick[btn_MoPhong, "SetValue[alpha, 0] \\n StartAnimation[alpha, true]"]`
+            },
+            {
+                title: "7. Khai triển hình trụ tròn xoay (3D)",
+                mode: "3d",
+                script: `// 1. Thanh trượt điều khiển bán kính r, chiều cao h và tiến trình trải phẳng t
+// Tốc độ hoạt ảnh đặt ngay ở tham số thứ 4 của Slider (không có lệnh SetAnimationSpeed)
+r = Slider(1, 5, 0.1)
+SetValue(r, 2)
+h = Slider(1, 8, 0.1)
+SetValue(h, 4)
+t = Slider(0, 1, 0.01, 1.5)
+SetValue(t, 0)
+
+// 2. Hai đáy hình trụ (giữ nguyên trong suốt quá trình trải phẳng)
+dayDuoi = Surface(rho*cos(u), rho*sin(u), 0, u, 0, 2pi, rho, 0, r)
+SetColor(dayDuoi, "Blue")
+SetFilling(dayDuoi, 0.6)
+dayTren = Surface(rho*cos(u), rho*sin(u), h, u, 0, 2pi, rho, 0, r)
+SetColor(dayTren, "Blue")
+SetFilling(dayTren, 0.6)
+
+// 3. Mặt xung quanh: khi t = 0 là mặt trụ tròn xoay, khi t = 1 duỗi thẳng thành hình chữ nhật
+matXungQuanh = Surface((1-t)*r*cos(u) + t*r*(u - pi), (1-t)*r*sin(u) + t*(-r), v, u, 0, 2pi, v, 0, h)
+SetColor(matXungQuanh, "Cyan")
+SetFilling(matXungQuanh, 0.4)
+
+// 4. Nút bấm chạy/đảo hoạt ảnh trải phẳng - cuộn lại
+btn = Button("Trải phẳng / Cuộn lại")
+SetOnClick[btn, "StartAnimation(t)"]
+
+// 5. Công thức diện tích hiển thị động (dùng Text, KHÔNG dùng FormulaText vì
+// FormulaText chỉ nhận một đối tượng có sẵn, không nhận chuỗi ghép tự do)
+chuThich1 = Text("S_{xq} = 2\\pi rh = " + (2 * pi * r * h), (6, 6), true, true)
+chuThich2 = Text("S_{đáy} = \\pi r^2 = " + (pi * r^2), (6, 5), true, true)
+chuThich3 = Text("S_{tp} = S_{xq} + 2S_{đáy} = " + (2 * pi * r * h + 2 * pi * r^2), (6, 4), true, true)`
+            },
+            {
+                title: "8. Sơ đồ Venn - Phép toán tập hợp (2D)",
+                mode: "classic",
+                script: `// CHẾ ĐỘ: 2D
+// Bài: Sơ đồ Venn & Các phép toán trên tập hợp — Hình học 10
+// Kéo Tâm A hoặc kéo Slider t (hoặc bấm nút) để di chuyển Tập B, dùng Slider rA/rB đổi bán kính, chọn phép toán muốn xem.
+
+// 1. Tập vũ trụ U (hình chữ nhật cố định)
+U = Polygon((-10, -8), (-10, 8), (10, 8), (10, -8))
+SetColor(U, "Grey")
+SetFilling(U, 0.1)
+SetLineThickness(U, 2)
+Text("U", (-10.5, 8))
+
+// 2. Bán kính (Slider) và tâm 2 tập hợp
+rA = Slider(1, 8, 0.1)
+SetValue(rA, 5)
+rB = Slider(1, 8, 0.1)
+SetValue(rB, 5)
+
+// Tâm A: điểm tự do, kéo tay được
+cA = (-3, 0)
+
+// Tâm B: PHỤ THUỘC trực tiếp vào Slider t (không dùng SetCoords một lần,
+// vì SetCoords/SetValue chỉ chạy đúng 1 lần chứ không tạo ràng buộc lâu dài -
+// nếu không B sẽ đứng yên khi bấm nút chạy hoạt ảnh)
+t = Slider(-8, 8, 0.1)
+SetValue(t, 3)
+cB = (t, 0)
+
+// Hướng dẫn
+Text("Kéo Tâm A; kéo Slider t (hoặc bấm nút) để di chuyển Tâm B.", (-9, 11))
+Text("Dùng Slider rA, rB để thay đổi bán kính.", (-9, 10))
+Text("A", (-3, -rA - 1))
+Text("B", (x(cB), -rB - 1))
+
+// 3. Hai đường tròn nền (biên của tập A, B)
+A_nen = Circle(cA, rA)
+SetColor(A_nen, "Blue")
+SetFilling(A_nen, 0.2)
+SetLineThickness(A_nen, 3)
+B_nen = Circle(cB, rB)
+SetColor(B_nen, "Red")
+SetFilling(B_nen, 0.2)
+SetLineThickness(B_nen, 3)
+
+// 4. Checkbox chọn phép toán muốn xem
+chkHop = Checkbox("A ∪ B")
+chkGiao = Checkbox("A ∩ B")
+chkHieuAB = Checkbox("A \\ B")
+chkHieuBA = Checkbox("B \\ A")
+chkBu = Checkbox("Phần bù của (A ∪ B)")
+SetValue(chkHop, true)
+SetValue(chkGiao, false)
+SetValue(chkHieuAB, false)
+SetValue(chkHieuBA, false)
+SetValue(chkBu, false)
+
+// 5. Tô màu kết quả từng phép toán
+// QUAN TRỌNG: ghép nhiều điều kiện Boolean phải dùng && (AND) và || (OR) -
+// GeoGebra KHÔNG nhận & hoặc | một dấu cho phép Boolean.
+condTrongA = (x - x(cA))^2 + (y - y(cA))^2 < rA^2
+condTrongB = (x - x(cB))^2 + (y - y(cB))^2 < rB^2
+condNgoaiA = (x - x(cA))^2 + (y - y(cA))^2 > rA^2
+condNgoaiB = (x - x(cB))^2 + (y - y(cB))^2 > rB^2
+condTrongU = (x > -10) && (x < 10) && (y > -8) && (y < 8)
+
+toHop = condTrongA || condTrongB
+SetColor(toHop, "Yellow")
+SetFilling(toHop, 0.8)
+SetConditionToShowObject(toHop, chkHop)
+
+toGiao = condTrongA && condTrongB
+SetColor(toGiao, "Yellow")
+SetFilling(toGiao, 0.8)
+SetConditionToShowObject(toGiao, chkGiao)
+
+toHieuAB = condTrongA && condNgoaiB
+SetColor(toHieuAB, "Yellow")
+SetFilling(toHieuAB, 0.8)
+SetConditionToShowObject(toHieuAB, chkHieuAB)
+
+toHieuBA = condTrongB && condNgoaiA
+SetColor(toHieuBA, "Yellow")
+SetFilling(toHieuBA, 0.8)
+SetConditionToShowObject(toHieuBA, chkHieuBA)
+
+// De Morgan: phần bù của (A ∪ B) = ngoài A VÀ ngoài B, giới hạn trong U
+toBu = condNgoaiA && condNgoaiB && condTrongU
+SetColor(toBu, "Yellow")
+SetFilling(toBu, 0.8)
+SetConditionToShowObject(toBu, chkBu)
+
+// 6. Nút bấm hoạt ảnh: tự động chạy Slider t để Tập B "quét" qua Tập A
+btnDiChuyenB = Button("Di chuyển tập B")
+SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
+            }
+        ];
+
+        // --- 2. Render danh sách ví dụ ---
+        const examplesContainer = document.getElementById('examplesContainer');
+        const scriptInput = document.getElementById('scriptInput');
+        const modeSelect = document.getElementById('modeSelect');
+
+        function loadExample(index) {
+            const ex = examples[index];
+            scriptInput.value = ex.script;
+            
+            // Nếu chế độ của ví dụ khác với chế độ hiện tại, tự động chuyển đổi
+            if (ex.mode !== currentMode) {
+                modeSelect.value = ex.mode;
+                currentMode = ex.mode;
+                initApplet(); // Load lại applet với mode mới
+            } else {
+                runScript(); // Cùng mode thì chạy luôn
+            }
+        }
+
+        examples.forEach((ex, idx) => {
+            const btn = document.createElement('button');
+            btn.className = "w-full text-left px-3 py-2 mb-1 rounded hover:bg-brand-50 text-sm text-slate-700 transition-colors flex items-center justify-between group";
+            
+            let icon = ex.mode === '3d' ? '<i class="fa-solid fa-cube text-brand-400 group-hover:text-brand-600"></i>' : '<i class="fa-regular fa-square text-brand-400 group-hover:text-brand-600"></i>';
+            
+            btn.innerHTML = `
+                <span class="truncate pr-2">${ex.title}</span>
+                ${icon}
+            `;
+            btn.onclick = () => loadExample(idx);
+            examplesContainer.appendChild(btn);
+        });
+
+        // Set mặc định ví dụ 1
+        scriptInput.value = examples[0].script;
+
+        // --- 3. Biến toàn cục cho API GeoGebra ---
+        let ggbAppletAPI = null;
+        let currentMode = "classic"; // 'classic' cho 2D, '3d' cho 3D
+
+        // --- 4. Cấu hình và Khởi tạo GeoGebra Applet ---
+        function initApplet() {
+            const container = document.getElementById('ggb-element');
+            
+            // Xóa nội dung cũ để chuẩn bị render applet mới
+            container.innerHTML = '';
+            ggbAppletAPI = null;
+
+            showStatus(`Đang tải chế độ ${currentMode === '3d' ? '3D' : '2D'}...`, false);
+
+            const parameters = {
+                "id": "ggbApplet",
+                // Luôn dùng app "classic" (đầy đủ tính năng, gồm cả bộ công cụ 2D lẫn 3D)
+                // thay vì app rút gọn "3d" - app "classic" mới có trọn vẹn toàn bộ công cụ
+                // GeoGebra (Điểm, Đường, Đa giác, Biến đổi, Đo lường... lẫn Mặt cầu, Hình chóp,
+                // Mặt phẳng, Lăng trụ...). Chuyển 2D/3D bằng "perspective" (đổi khung nhìn),
+                // không đổi appName nữa, nên bộ công cụ hiển thị luôn đầy đủ ở cả 2 chế độ.
+                "appName": "classic",
+                "perspective": currentMode === '3d' ? "AT" : "AG",
+                "width": container.clientWidth || (window.innerWidth > 1024 ? (window.innerWidth * 5/6) : window.innerWidth),
+                "height": container.clientHeight || window.innerHeight,
+                "showMenuBar": true,
+                "showAlgebraInput": true,
+                "showToolBar": true,
+                // Không giới hạn customToolBar -> dùng thanh công cụ mặc định đầy đủ của
+                // GeoGebra Classic (bao gồm toàn bộ nhóm công cụ 2D và 3D).
+                "showToolBarHelp": false,
+                "showResetIcon": true,
+                "enableLabelDrags": true,
+                "enableShiftDragZoom": true,
+                "enableRightClick": true,
+                // Tắt hộp thoại lỗi gốc của GeoGebra (native popup) khi 1 dòng lệnh sai —
+                // thanh trạng thái (statusBar) của công cụ đã tự báo "X thành công, Y lỗi",
+                // tránh làm gián đoạn khi trình chiếu trước lớp học.
+                "errorDialogsActive": false,
+                "useBrowserForJS": false,
+                "allowStyleBar": true,
+                "preventFocus": true,
+                "showZoomButtons": true,
+                "capturingThreshold": 3,
+                "appletOnLoad": function(api) {
+                    ggbAppletAPI = api;
+                    console.log(`GeoGebra loaded in ${currentMode} mode!`);
+                    runScript();
+                },
+                "language": "vi"
+            };
+
+            const applet = new GGBApplet(parameters, true);
+            applet.inject('ggb-element');
+        }
+
+        // --- Hàm xử lý resize linh hoạt cho applet (ĐÃ SỬA LỖI FULLSCREEN) ---
+        function resizeApplet() {
+            if(!ggbAppletAPI) return;
+            
+            // Kiểm tra xem có đang ở chế độ full màn hình không (Hỗ trợ đa trình duyệt)
+            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+            const container = document.getElementById('ggb-element');
+            
+            // Nếu full màn hình: Lấy toàn bộ chiều rộng/cao của cửa sổ
+            // Nếu bình thường: Lấy kích thước thực của thẻ div chứa applet
+            const width = isFullscreen ? window.innerWidth : container.clientWidth;
+            const height = isFullscreen ? window.innerHeight : container.clientHeight;
+            
+            ggbAppletAPI.setSize(width, height);
+        }
+
+        window.onload = function() {
+            initApplet();
+            window.addEventListener('resize', () => {
+                clearTimeout(window.resizeTimer);
+                window.resizeTimer = setTimeout(resizeApplet, 100);
+            });
+        };
+
+        // --- 5. Bộ Tiền Xử Lý Cú Pháp (AI Preprocessor) ---
+        function preprocessGGBScript(code) {
+            let lines = code.split('\n');
+            let newLines = [];
+            
+            for (let line of lines) {
+                let originalLine = line;
+                let trimmedLine = line.trim();
+                
+                // Bỏ qua dòng trống hoặc comment (hỗ trợ cả // và #)
+                if (!trimmedLine || trimmedLine.startsWith('//') || trimmedLine.startsWith('#')) {
+                    newLines.push(originalLine);
+                    continue;
+                }
+
+                // Fix 1: Sửa lỗi Plane định nghĩa bằng phương trình (VD: mat_phang = Plane(z = d) -> mat_phang: z = d)
+                trimmedLine = trimmedLine.replace(/([a-zA-Z0-9_]+)\s*=\s*Plane\s*\(\s*([^,]+=[^,]+)\s*\)/g, "$1: $2");
+                trimmedLine = trimmedLine.replace(/([a-zA-Z0-9_]+)\s*=\s*Plane\s*\[\s*([^,]+=[^,]+)\s*\]/g, "$1: $2");
+
+                // Fix 2: Sửa lỗi Checkbox sinh ra kèm giá trị boolean (VD: chk = Checkbox["Caption", true])
+                // GeoGebra API không nhận boolean ở constructor của Checkbox, phải tách làm 2 lệnh Checkbox và SetValue
+                if (/Checkbox\s*[\[\(].*,\s*(true|false)\s*[\]\)]/i.test(trimmedLine)) {
+                    trimmedLine = trimmedLine.replace(/([a-zA-Z0-9_]+)\s*=\s*Checkbox\s*[\[\(]\s*(.+?)\s*,\s*(true|false)\s*[\]\)]/gi, "$1 = Checkbox[$2]\nSetValue[$1, $3]");
+                }
+
+                // Fix 3: Đổi Ngoặc đơn sang Ngoặc vuông cho Lệnh GeoGebra
+                trimmedLine = convertBracketsForCommands(trimmedLine);
+                
+                // Giữ lại khoảng trắng đầu dòng để code đẹp
+                let leadingSpace = line.match(/^\s*/)[0];
+                newLines.push(leadingSpace + trimmedLine);
+            }
+            return newLines.join('\n');
+        }
+
+        function convertBracketsForCommands(str) {
+            let res = '';
+            let i = 0;
+            let inString = false;
+            
+            while (i < str.length) {
+                // Bỏ qua nội dung bên trong dấu nháy kép (chuỗi văn bản)
+                if (str[i] === '"') {
+                    inString = !inString;
+                    res += str[i];
+                    i++;
+                    continue;
+                }
+                
+                if (inString) {
+                    res += str[i];
+                    i++;
+                    continue;
+                }
+                
+                // Bắt các lệnh: Bắt đầu bằng chữ Hoa, theo sau là chữ/số/_ và '('
+                let match = str.slice(i).match(/^([A-Z][a-zA-Z0-9_]*)\s*\(/);
+                
+                if (match) {
+                    let cmd = match[1];
+                    res += cmd + '['; // Đổi ( thành [
+                    i += match[0].length;
+                    
+                    let depth = 1;
+                    let innerContent = '';
+                    let innerInString = false;
+                    
+                    // Quét tìm dấu ngoặc đóng tương ứng
+                    while (i < str.length && depth > 0) {
+                        if (str[i] === '"') {
+                            innerInString = !innerInString;
+                        }
+                        
+                        if (!innerInString) {
+                            if (str[i] === '(') depth++;
+                            else if (str[i] === ')') depth--;
+                        }
+                        
+                        if (depth > 0) {
+                            innerContent += str[i];
+                            i++;
+                        }
+                    }
+                    
+                    // Đệ quy xử lý các lệnh lồng nhau (vd: Point(Intersect(A, B)))
+                    res += convertBracketsForCommands(innerContent) + ']';
+                    
+                    if (i < str.length && str[i] === ')') {
+                        i++; // Bỏ qua dấu ')' đóng nguyên bản
+                    }
+                } else {
+                    res += str[i];
+                    i++;
+                }
+            }
+            return res;
+        }
+
+        // --- 5b. Xử lý riêng cho "SetOnClick" (KHÔNG phải lệnh GeoGebra thật) ---
+        // GeoGebra không có lệnh evalCommand nào tên "SetOnClick". Cách chính thức để gán
+        // script cho sự kiện click là dùng JS API: ggbApplet.registerObjectClickListener().
+        // Hàm này nhận diện cú pháp quen thuộc "SetOnClick[Obj, "lệnh1 \n lệnh2"]" (hoặc dùng
+        // ngoặc đơn) do AI/người dùng viết ra, rồi tự "biên dịch" sang registerObjectClickListener
+        // thay vì đẩy thẳng vào evalCommand (sẽ luôn báo lỗi "Câu lệnh chưa định nghĩa").
+        const SET_ON_CLICK_RE = /^SetOnClick[\[\(]\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*"([\s\S]*)"\s*[\]\)]\s*;?\s*$/i;
+
+        function parseSetOnClickLine(line) {
+            const match = line.match(SET_ON_CLICK_RE);
+            if (!match) return null;
+            const objName = match[1];
+            let scriptRaw = match[2];
+            // Giải mã các ký tự escape thường gặp: \n (xuống dòng), \" (dấu ngoặc kép), \\ (backslash)
+            scriptRaw = scriptRaw.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+            const scriptLines = scriptRaw.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('//') && !s.startsWith('#'));
+            return { objName, scriptLines };
+        }
+
+        function applySetOnClick(objName, scriptLines) {
+            ggbAppletAPI.registerObjectClickListener(objName, function() {
+                scriptLines.forEach(function(cmd) {
+                    const res = ggbAppletAPI.evalCommand(cmd);
+                    if (res === false) console.warn("Lệnh lỗi trong SetOnClick của", objName, ":", cmd);
+                });
+            });
+        }
+
+        // --- 6. Logic xử lý tương tác UI (Run, Clear, Mode) ---
+        const btnRun = document.getElementById('btnRun');
+        const btnClear = document.getElementById('btnClear');
+        const statusText = document.getElementById('statusText');
+
+        modeSelect.addEventListener('change', (e) => {
+            currentMode = e.target.value;
+            initApplet();
+        });
+
+        function showStatus(message, isError = false) {
+            if(isError) {
+                statusText.innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-500 mr-1"></i> <span class="text-red-600">${message}</span>`;
+            } else {
+                statusText.innerHTML = `<i class="fa-solid fa-check-circle text-green-500 mr-1"></i> <span>${message}</span>`;
+            }
+        }
+
+        function runScript() {
+            if (!ggbAppletAPI) {
+                showStatus("Lỗi: GeoGebra chưa tải xong!", true);
+                return;
+            }
+
+            const rawCode = scriptInput.value;
+            if(!rawCode.trim()) {
+                showStatus("Mã trống!", true);
+                return;
+            }
+
+            showStatus("Đang xử lý mã...");
+
+            try {
+                // Xóa toàn bộ object cũ trước khi vẽ mới
+                ggbAppletAPI.reset();
+                ggbAppletAPI.newConstruction();
+
+                // Chạy qua AI Preprocessor
+                const processedCode = preprocessGGBScript(rawCode);
+                const lines = processedCode.split('\n');
+
+                let successCount = 0;
+                let failCount = 0;
+                const failedLines = [];
+
+                for (let line of lines) {
+                    const cmd = line.trim();
+                    // Bỏ qua các dòng chú thích bắt đầu bằng // hoặc # trong vòng lặp thực thi
+                    if (cmd && !cmd.startsWith('//') && !cmd.startsWith('#')) {
+                        // "SetOnClick" không phải lệnh GeoGebra thật -> xử lý riêng bằng JS API
+                        const soc = parseSetOnClickLine(cmd);
+                        if (soc) {
+                            try {
+                                applySetOnClick(soc.objName, soc.scriptLines);
+                                successCount++;
+                            } catch (e) {
+                                console.warn("Không gán được SetOnClick cho", soc.objName, e);
+                                failCount++;
+                                failedLines.push(cmd);
+                            }
+                            continue;
+                        }
+
+                        // Gọi hàm evalCommand của GeoGebra API
+                        const result = ggbAppletAPI.evalCommand(cmd);
+                        if (result === false) {
+                            console.warn("Lệnh lỗi:", cmd);
+                            failCount++;
+                            failedLines.push(cmd);
+                        } else {
+                            successCount++;
+                        }
+                    }
+                }
+
+                if (failCount > 0) {
+                    // Liệt kê rõ (các) dòng lỗi trong status bar (kèm tooltip đầy đủ khi rê chuột)
+                    // thay vì chỉ đếm số lượng, để dễ tìm và sửa mà không cần mở Console.
+                    const preview = failedLines.slice(0, 2).join(' | ');
+                    const more = failedLines.length > 2 ? ` (+${failedLines.length - 2} dòng khác)` : '';
+                    showStatus(`${successCount} thành công, ${failCount} lỗi: ${preview}${more}`, true);
+                    statusText.title = 'Các dòng lỗi:\n' + failedLines.join('\n');
+                } else {
+                    showStatus("Đã chạy thành công!");
+                    statusText.title = '';
+                }
+            } catch (err) {
+                console.error(err);
+                showStatus("Lỗi nghiêm trọng khi chạy script.", true);
+            }
+        }
+
+        btnRun.addEventListener('click', runScript);
+        
+        btnClear.addEventListener('click', () => {
+            scriptInput.value = '';
+            if(ggbAppletAPI) {
+                ggbAppletAPI.reset();
+                ggbAppletAPI.newConstruction();
+            }
+            showStatus("Đã xóa mã.");
+        });
+
+        // Phím tắt Ctrl + Enter để chạy và Tab để thụt lề
+        scriptInput.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                runScript();
+            }
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 4;
+            }
+        });
+
+        function resetStandardView() {
+            if(ggbAppletAPI) {
+                ggbAppletAPI.setStandardView();
+            }
+        }
+
+        const btnResetView = document.getElementById('btnResetView');
+        const btnResetViewMobile = document.getElementById('btnResetViewMobile');
+        btnResetView.addEventListener('click', resetStandardView);
+        if(btnResetViewMobile) btnResetViewMobile.addEventListener('click', resetStandardView);
+
+        // --- 7. Chức năng Fullscreen (Trình chiếu) ---
+        const geogebraSection = document.getElementById('geogebra-section');
+        const btnFullscreen = document.getElementById('btnFullscreen');
+        const btnFullscreenMobile = document.getElementById('btnFullscreenMobile');
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                if (geogebraSection.requestFullscreen) {
+                    geogebraSection.requestFullscreen();
+                } else if (geogebraSection.webkitRequestFullscreen) { /* Safari */
+                    geogebraSection.webkitRequestFullscreen();
+                } else if (geogebraSection.msRequestFullscreen) { /* IE11 */
+                    geogebraSection.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) { /* Safari */
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) { /* IE11 */
+                    document.msExitFullscreen();
+                }
+            }
+        }
+
+        // --- Hàm xử lý UI khi thay đổi trạng thái Fullscreen ---
+        function handleFullscreenChange() {
+            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+            
+            if (btnFullscreen) {
+                const icon = btnFullscreen.querySelector('i');
+                const span = btnFullscreen.querySelector('span');
+                if (isFullscreen) {
+                    icon.className = 'fa-solid fa-compress';
+                    span.textContent = 'Thu nhỏ';
+                } else {
+                    icon.className = 'fa-solid fa-expand';
+                    span.textContent = 'Trình chiếu';
+                }
+            }
+
+            if (btnFullscreenMobile) {
+                const icon = btnFullscreenMobile.querySelector('i');
+                icon.className = isFullscreen ? 'fa-solid fa-compress' : 'fa-solid fa-expand';
+            }
+
+            // GỌI RESIZE THEO TỪNG NHỊP THỜI GIAN:
+            // Trình duyệt cần một khoảng thời gian (khoảng vài trăm mili-giây) để hoàn tất animation phóng to.
+            // Việc gọi hàm nhiều lần đảm bảo GeoGebra không bị "bỏ lỡ" kích thước cuối cùng.
+            setTimeout(resizeApplet, 50);
+            setTimeout(resizeApplet, 300);
+            setTimeout(resizeApplet, 600);
+        }
+
+        // Lắng nghe sự kiện thay đổi trạng thái fullscreen (Hỗ trợ đa trình duyệt)
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+        document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+        if (btnFullscreen) btnFullscreen.addEventListener('click', toggleFullscreen);
+        if (btnFullscreenMobile) btnFullscreenMobile.addEventListener('click', toggleFullscreen);
+
+        // ==========================================================================
+        // --- 8. THƯ VIỆN CODE (lưu có đặt tên, dùng lại) + ĐỒNG BỘ GOOGLE SHEET ---
+        // ==========================================================================
+
+        const LIB_KEY = 'ggbLibrary_snippets_v1';
+        const URL_KEY = 'ggbLibrary_webAppUrl_v1';
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str == null ? '' : String(str);
+            return div.innerHTML;
+        }
+
+        function genId() {
+            return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        }
+
+        function nowStr() {
+            const d = new Date();
+            return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function getWebAppUrl() { return (localStorage.getItem(URL_KEY) || '').trim(); }
+        function setWebAppUrl(url) { localStorage.setItem(URL_KEY, url); }
+
+        function loadLocalLibrary() {
+            try {
+                const raw = localStorage.getItem(LIB_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) { return []; }
+        }
+        function saveLocalLibrary(list) {
+            try { localStorage.setItem(LIB_KEY, JSON.stringify(list)); } catch (e) { console.error(e); }
+        }
+
+        let libraryItems = loadLocalLibrary();
+
+        // --- Tham chiếu DOM ---
+        const tabExamples = document.getElementById('tabExamples');
+        const tabLibrary = document.getElementById('tabLibrary');
+        const libraryPane = document.getElementById('libraryPane');
+        const libraryContainer = document.getElementById('libraryContainer');
+        const libCount = document.getElementById('libCount');
+        const sheetSyncStatus = document.getElementById('sheetSyncStatus');
+        const btnSaveToLibrary = document.getElementById('btnSaveToLibrary');
+        const btnSyncSheet = document.getElementById('btnSyncSheet');
+        const btnSheetSettings = document.getElementById('btnSheetSettings');
+
+        const nameModalOverlay = document.getElementById('nameModalOverlay');
+        const nameModalTitle = document.getElementById('nameModalTitle');
+        const gradeModalSelect = document.getElementById('gradeModalSelect');
+        const nameModalInput = document.getElementById('nameModalInput');
+        const nameModalError = document.getElementById('nameModalError');
+        const LAST_GRADE_KEY = 'ggbLibrary_lastGrade_v1';
+        const GRADE_ORDER = ['10', '11', '12', 'Khác'];
+        const nameModalCancel = document.getElementById('nameModalCancel');
+        const nameModalSave = document.getElementById('nameModalSave');
+
+        const settingsModalOverlay = document.getElementById('settingsModalOverlay');
+        const webAppUrlInput = document.getElementById('webAppUrlInput');
+        const btnSaveUrl = document.getElementById('btnSaveUrl');
+        const btnClearUrl = document.getElementById('btnClearUrl');
+        const btnCloseSettings = document.getElementById('btnCloseSettings');
+        const appsScriptCode = document.getElementById('appsScriptCode');
+        const btnCopyScript = document.getElementById('btnCopyScript');
+
+        // --- Chuyển tab Ví dụ / Thư viện ---
+        function activateTab(tab) {
+            const isExamples = tab === 'examples';
+            tabExamples.classList.toggle('text-brand-700', isExamples);
+            tabExamples.classList.toggle('border-brand-600', isExamples);
+            tabExamples.classList.toggle('text-slate-500', !isExamples);
+            tabExamples.classList.toggle('border-transparent', !isExamples);
+
+            tabLibrary.classList.toggle('text-brand-700', !isExamples);
+            tabLibrary.classList.toggle('border-brand-600', !isExamples);
+            tabLibrary.classList.toggle('text-slate-500', isExamples);
+            tabLibrary.classList.toggle('border-transparent', isExamples);
+
+            examplesContainer.classList.toggle('hidden', !isExamples);
+            libraryPane.classList.toggle('hidden', isExamples);
+            libraryPane.classList.toggle('flex', !isExamples);
+        }
+        tabExamples.addEventListener('click', () => activateTab('examples'));
+        tabLibrary.addEventListener('click', () => activateTab('library'));
+
+        // --- Trạng thái đồng bộ ---
+        function setSyncStatus(msg, type) {
+            const colorMap = { ok: 'text-emerald-600', error: 'text-red-500', warn: 'text-amber-500', info: 'text-slate-400' };
+            sheetSyncStatus.className = 'text-[10px] mb-2 shrink-0 truncate ' + (colorMap[type] || 'text-slate-400');
+            sheetSyncStatus.textContent = msg;
+        }
+        function refreshSyncStatusIdle() {
+            if (!getWebAppUrl()) setSyncStatus('Chưa cấu hình Google Sheet.', 'warn');
+            else setSyncStatus('Đã kết nối Google Sheet.', 'ok');
+        }
+
+        // --- Render danh sách thư viện ---
+        function itemGrade(item) {
+            return (item.grade && GRADE_ORDER.includes(item.grade)) ? item.grade : 'Khác';
+        }
+
+        function renderLibraryRow(item) {
+            const row = document.createElement('div');
+            row.className = "group flex items-center justify-between px-2 py-2 mb-1 rounded hover:bg-brand-50 text-sm text-slate-700 transition-colors";
+            const icon = item.mode === '3d'
+                ? '<i class="fa-solid fa-cube text-brand-400 group-hover:text-brand-600 shrink-0"></i>'
+                : '<i class="fa-regular fa-square text-brand-400 group-hover:text-brand-600 shrink-0"></i>';
+            row.innerHTML = `
+                <button class="loadBtn flex-1 min-w-0 text-left truncate flex items-center gap-2" title="Nạp đoạn code này">
+                    ${icon}<span class="truncate">${escapeHtml(item.name)}</span>
+                </button>
+                <div class="flex gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity shrink-0 ml-1">
+                    <button class="renameBtn text-slate-400 hover:text-brand-600 px-1.5 py-1" title="Đổi tên / Đổi lớp"><i class="fa-solid fa-pen text-xs"></i></button>
+                    <button class="deleteBtn text-slate-400 hover:text-red-600 px-1.5 py-1" title="Xóa"><i class="fa-solid fa-trash text-xs"></i></button>
+                </div>
+            `;
+            row.querySelector('.loadBtn').addEventListener('click', () => loadLibraryItem(item));
+            row.querySelector('.renameBtn').addEventListener('click', (e) => { e.stopPropagation(); openNameModal('rename', item); });
+            row.querySelector('.deleteBtn').addEventListener('click', (e) => { e.stopPropagation(); deleteLibraryItem(item); });
+            return row;
+        }
+
+        function renderLibrary() {
+            libCount.textContent = '(' + libraryItems.length + ')';
+
+            // Ghi nhớ thư mục Lớp nào đang mở trước khi vẽ lại, để không tự đóng sau mỗi lần lưu/xóa
+            const openGrades = new Set();
+            libraryContainer.querySelectorAll('details[data-grade]').forEach(d => {
+                if (d.open) openGrades.add(d.getAttribute('data-grade'));
+            });
+
+            libraryContainer.innerHTML = '';
+            if (libraryItems.length === 0) {
+                libraryContainer.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 px-2">Chưa có code nào được lưu.<br>Bấm nút <i class="fa-solid fa-floppy-disk"></i> ở góc trên để lưu mã hiện tại.</p>';
+                return;
+            }
+
+            // Gom nhóm theo Lớp: 10 -> 11 -> 12 -> Khác, mỗi thư mục là 1 <details> có thể bấm mở
+            const byGrade = {};
+            libraryItems.forEach(item => {
+                const g = itemGrade(item);
+                (byGrade[g] = byGrade[g] || []).push(item);
+            });
+            // Lần đầu (chưa có thư mục nào từng mở) thì tự mở sẵn thư mục Lớp đầu tiên có dữ liệu
+            const firstNonEmptyGrade = GRADE_ORDER.find(g => byGrade[g] && byGrade[g].length);
+
+            GRADE_ORDER.forEach(grade => {
+                const items = byGrade[grade];
+                if (!items || items.length === 0) return;
+                const sorted = items.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+
+                const details = document.createElement('details');
+                details.setAttribute('data-grade', grade);
+                details.className = "mb-1.5 border border-slate-100 rounded-md overflow-hidden";
+                details.open = openGrades.size > 0 ? openGrades.has(grade) : (grade === firstNonEmptyGrade);
+
+                const summary = document.createElement('summary');
+                summary.className = "px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-600 cursor-pointer select-none flex items-center gap-2";
+                summary.innerHTML = `<i class="fa-solid fa-folder text-amber-400"></i> Lớp ${escapeHtml(grade)} <span class="text-slate-400 font-normal">(${items.length})</span>`;
+                details.appendChild(summary);
+
+                const body = document.createElement('div');
+                body.className = "p-1.5";
+                sorted.forEach(item => body.appendChild(renderLibraryRow(item)));
+                details.appendChild(body);
+
+                libraryContainer.appendChild(details);
+            });
+        }
+
+        function loadLibraryItem(item) {
+            scriptInput.value = item.script;
+            if (item.mode !== currentMode) {
+                modeSelect.value = item.mode;
+                currentMode = item.mode;
+                initApplet();
+            } else {
+                runScript();
+            }
+            showStatus(`Đã nạp "${item.name}" từ thư viện.`);
+        }
+
+        function deleteLibraryItem(item) {
+            if (!confirm(`Xóa "${item.name}" khỏi thư viện? (Nếu đã kết nối Google Sheet, mục này cũng sẽ bị xóa trên Sheet.)`)) return;
+            libraryItems = libraryItems.filter(x => x.id !== item.id);
+            saveLocalLibrary(libraryItems);
+            renderLibrary();
+            deleteFromSheet(item.id);
+        }
+
+        // --- Modal đặt tên (Lưu mới / Đổi tên) ---
+        let nameModalMode = 'save';
+        let nameModalEditItem = null;
+
+        function openNameModal(mode, item) {
+            nameModalMode = mode;
+            nameModalEditItem = item || null;
+            nameModalTitle.innerHTML = mode === 'save'
+                ? '<i class="fa-solid fa-floppy-disk text-emerald-600"></i> Lưu vào thư viện'
+                : '<i class="fa-solid fa-pen text-brand-600"></i> Đổi tên / Đổi lớp';
+            const defaultGrade = localStorage.getItem(LAST_GRADE_KEY) || '10';
+            gradeModalSelect.value = item ? itemGrade(item) : (GRADE_ORDER.includes(defaultGrade) ? defaultGrade : '10');
+            nameModalInput.value = item ? item.name : '';
+            nameModalError.classList.add('hidden');
+            nameModalOverlay.classList.remove('hidden');
+            nameModalOverlay.classList.add('flex');
+            setTimeout(() => { nameModalInput.focus(); nameModalInput.select(); }, 50);
+        }
+        function closeNameModal() {
+            nameModalOverlay.classList.add('hidden');
+            nameModalOverlay.classList.remove('flex');
+        }
+
+        function confirmNameModal() {
+            const val = nameModalInput.value.trim();
+            const grade = gradeModalSelect.value;
+            if (!val) {
+                nameModalError.classList.remove('hidden');
+                nameModalInput.focus();
+                return;
+            }
+            localStorage.setItem(LAST_GRADE_KEY, grade);
+            if (nameModalMode === 'save') {
+                const item = {
+                    id: genId(),
+                    grade: grade,
+                    name: val,
+                    mode: currentMode,
+                    script: scriptInput.value,
+                    updatedAt: new Date().toISOString()
+                };
+                libraryItems.push(item);
+                saveLocalLibrary(libraryItems);
+                renderLibrary();
+                closeNameModal();
+                activateTab('library');
+                pushToSheet(item);
+            } else if (nameModalEditItem) {
+                nameModalEditItem.grade = grade;
+                nameModalEditItem.name = val;
+                nameModalEditItem.updatedAt = new Date().toISOString();
+                saveLocalLibrary(libraryItems);
+                renderLibrary();
+                closeNameModal();
+                pushToSheet(nameModalEditItem);
+            }
+        }
+
+        btnSaveToLibrary.addEventListener('click', () => {
+            if (!scriptInput.value.trim()) { showStatus('Không có mã để lưu!', true); return; }
+            openNameModal('save', null);
+        });
+        nameModalCancel.addEventListener('click', closeNameModal);
+        nameModalSave.addEventListener('click', confirmNameModal);
+        nameModalOverlay.addEventListener('click', (e) => { if (e.target === nameModalOverlay) closeNameModal(); });
+        nameModalInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); confirmNameModal(); }
+            if (e.key === 'Escape') closeNameModal();
+        });
+
+        // --- Đồng bộ Google Sheet qua Google Apps Script Web App ---
+        async function pushToSheet(item) {
+            const url = getWebAppUrl();
+            if (!url) { setSyncStatus('Đã lưu cục bộ (chưa cấu hình Google Sheet).', 'warn'); return; }
+            setSyncStatus('Đang đồng bộ lên Google Sheet...', 'info');
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // tránh preflight CORS với Apps Script
+                    body: JSON.stringify({ action: 'upsert', id: item.id, grade: itemGrade(item), name: item.name, mode: item.mode, script: item.script, updatedAt: item.updatedAt })
+                });
+                const json = await res.json();
+                if (json && json.ok) setSyncStatus('Đã đồng bộ lên Google Sheet lúc ' + nowStr() + '.', 'ok');
+                else setSyncStatus('Lỗi đồng bộ: ' + (json && json.error ? json.error : 'không rõ nguyên nhân'), 'error');
+            } catch (err) {
+                console.error(err);
+                setSyncStatus('Đã lưu cục bộ, nhưng không kết nối được Google Sheet.', 'error');
+            }
+        }
+
+        async function deleteFromSheet(id) {
+            const url = getWebAppUrl();
+            if (!url) return;
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'delete', id: id })
+                });
+                await res.json();
+                setSyncStatus('Đã xóa trên Google Sheet lúc ' + nowStr() + '.', 'ok');
+            } catch (err) {
+                console.error(err);
+                setSyncStatus('Đã xóa cục bộ, nhưng không xóa được trên Google Sheet.', 'error');
+            }
+        }
+
+        async function pullFromSheet(silent) {
+            const url = getWebAppUrl();
+            if (!url) { setSyncStatus('Chưa cấu hình Google Sheet.', 'warn'); return; }
+            if (!silent) setSyncStatus('Đang tải thư viện từ Google Sheet...', 'info');
+            try {
+                const res = await fetch(url + (url.indexOf('?') > -1 ? '&' : '?') + 'action=list');
+                const json = await res.json();
+                if (json && json.ok) {
+                    libraryItems = json.items || [];
+                    saveLocalLibrary(libraryItems);
+                    renderLibrary();
+                    setSyncStatus('Đã tải ' + libraryItems.length + ' mục từ Google Sheet lúc ' + nowStr() + '.', 'ok');
+                } else {
+                    setSyncStatus('Lỗi tải từ Sheet: ' + (json && json.error ? json.error : 'không rõ nguyên nhân'), 'error');
+                }
+            } catch (err) {
+                console.error(err);
+                setSyncStatus('Không kết nối được tới Google Sheet (kiểm tra lại URL / quyền truy cập).', 'error');
+            }
+        }
+
+        btnSyncSheet.addEventListener('click', () => pullFromSheet(false));
+
+        // --- Modal cài đặt kết nối Google Sheet ---
+        const APPS_SCRIPT_SOURCE = `function getSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Library');
+  if (!sheet) {
+    sheet = ss.insertSheet('Library');
+    sheet.appendRow(['id', 'grade', 'name', 'mode', 'script', 'updatedAt']);
+  }
+  return sheet;
+}
+
+function doGet(e) {
+  var sheet = getSheet();
+  var data = sheet.getDataRange().getValues();
+  var rows = [];
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    rows.push({
+      id: data[i][0],
+      grade: data[i][1],
+      name: data[i][2],
+      mode: data[i][3],
+      script: data[i][4],
+      updatedAt: data[i][5]
+    });
+  }
+  return ContentService.createTextOutput(JSON.stringify({ ok: true, items: rows }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var sheet = getSheet();
+    var action = body.action;
+
+    if (action === 'upsert') {
+      var data = sheet.getDataRange().getValues();
+      var rowIndex = -1;
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0] === body.id) { rowIndex = i + 1; break; }
+      }
+      var rowValues = [body.id, body.grade || 'Khác', body.name, body.mode, body.script, body.updatedAt];
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, 6).setValues([rowValues]);
+      } else {
+        sheet.appendRow(rowValues);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === 'delete') {
+      var data2 = sheet.getDataRange().getValues();
+      for (var j = 1; j < data2.length; j++) {
+        if (data2[j][0] === body.id) {
+          sheet.deleteRow(j + 1);
+          break;
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'Unknown action: ' + action }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+        function openSettingsModal() {
+            webAppUrlInput.value = getWebAppUrl();
+            appsScriptCode.value = APPS_SCRIPT_SOURCE;
+            settingsModalOverlay.classList.remove('hidden');
+            settingsModalOverlay.classList.add('flex');
+        }
+        function closeSettingsModal() {
+            settingsModalOverlay.classList.add('hidden');
+            settingsModalOverlay.classList.remove('flex');
+        }
+
+        btnSheetSettings.addEventListener('click', openSettingsModal);
+        btnCloseSettings.addEventListener('click', closeSettingsModal);
+        settingsModalOverlay.addEventListener('click', (e) => { if (e.target === settingsModalOverlay) closeSettingsModal(); });
+
+        btnSaveUrl.addEventListener('click', () => {
+            const val = webAppUrlInput.value.trim();
+            if (!val) { setSyncStatus('Vui lòng nhập Web App URL.', 'error'); return; }
+            setWebAppUrl(val);
+            closeSettingsModal();
+            activateTab('library');
+            pullFromSheet(false);
+        });
+        btnClearUrl.addEventListener('click', () => {
+            setWebAppUrl('');
+            webAppUrlInput.value = '';
+            setSyncStatus('Đã ngắt kết nối Google Sheet. Thư viện vẫn được lưu cục bộ trên trình duyệt.', 'warn');
+        });
+        btnCopyScript.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(appsScriptCode.value);
+                const original = btnCopyScript.innerHTML;
+                btnCopyScript.innerHTML = '<i class="fa-solid fa-check"></i> Đã copy';
+                setTimeout(() => { btnCopyScript.innerHTML = original; }, 1500);
+            } catch (err) {
+                appsScriptCode.select();
+                document.execCommand('copy');
+            }
+        });
+
+        // --- Khởi tạo ban đầu ---
+        renderLibrary();
+        refreshSyncStatusIdle();
+        if (getWebAppUrl()) pullFromSheet(true);
+
+    </script>
+</body>
+</html>
