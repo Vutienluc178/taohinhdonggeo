@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GeoGebra AI Script Vũ Tiến Lực - THPT Nguyễn Hữu Cảnh</title>
+    <title>GeoGebra AI Script Runner</title>
     <!-- Tailwind CSS cho giao diện -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome cho icon -->
@@ -65,7 +65,7 @@
             <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-inner">
                 <i class="fa-solid fa-shapes"></i>
             </div>
-            <h1 class="text-lg font-bold text-slate-800 tracking-tight">GeoGebra <span class="text-brand-600">AI Vũ Tiến Lực - THPT Nguyễn Hữu Cảnh</span></h1>
+            <h1 class="text-lg font-bold text-slate-800 tracking-tight">GeoGebra <span class="text-brand-600">AI Runner</span></h1>
         </div>
         <div class="flex items-center gap-4">
             <div class="text-sm text-slate-500 hidden lg:block">
@@ -105,6 +105,9 @@
                     </button>
                     <button id="btnSaveToLibrary" class="px-2 py-1 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-md shadow-sm transition-colors flex items-center gap-1" title="Lưu mã hiện tại vào thư viện">
                         <i class="fa-solid fa-floppy-disk"></i>
+                    </button>
+                    <button id="btnStepMode" class="px-2 py-1 text-xs font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-md shadow-sm transition-colors flex items-center gap-1" title="Trình chiếu từng bước dựng hình (mỗi khối lệnh cách nhau bởi dòng trống = 1 bước)">
+                        <i class="fa-solid fa-list-ol"></i>
                     </button>
                 </div>
             </div>
@@ -172,6 +175,23 @@
                 </button>
                 <button id="btnFullscreen" class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-md shadow-sm transition-all flex items-center gap-2 text-sm font-medium" title="Trình chiếu toàn màn hình">
                     <i class="fa-solid fa-expand"></i> <span>Trình chiếu</span>
+                </button>
+            </div>
+
+            <!-- Thanh điều khiển trình chiếu từng bước (nằm trong geogebra-section nên vẫn hiện khi Trình chiếu toàn màn hình) -->
+            <div id="stepModeOverlay" class="hidden absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur border border-amber-300 rounded-xl shadow-lg px-3 py-2 flex items-center gap-3">
+                <button id="btnStepPrev" class="w-8 h-8 flex items-center justify-center text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title="Bước trước (phím ←)">
+                    <i class="fa-solid fa-backward-step"></i>
+                </button>
+                <div class="flex flex-col items-center leading-tight min-w-[110px] max-w-[240px]">
+                    <span id="stepModeLabel" class="text-sm font-bold text-amber-900">Bước 0 / 0</span>
+                    <span id="stepModeCaption" class="text-[11px] text-amber-700 truncate w-full text-center"></span>
+                </div>
+                <button id="btnStepNext" class="w-8 h-8 flex items-center justify-center text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title="Bước sau (phím →)">
+                    <i class="fa-solid fa-forward-step"></i>
+                </button>
+                <button id="btnStepExit" class="ml-1 w-8 h-8 flex items-center justify-center text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors" title="Thoát trình chiếu từng bước (Esc)">
+                    <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
 
@@ -584,10 +604,24 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         let pendingRestoreBase64 = null;
         let pendingRestoreName = '';
 
+        // --- 3b. Trạng thái cho chế độ "Trình chiếu từng bước dựng hình" ---
+        // Mỗi "bước" = 1 khối lệnh trong script (các dòng liên tiếp không có dòng trống xen giữa).
+        // stepBlocks: danh sách các khối { lines, title } theo đúng thứ tự trong mã.
+        // stepBoundaries[i]: số "bước dựng hình" (construction step) tích lũy của GeoGebra sau khi
+        // đã chạy xong khối thứ i (đo bằng getConstructionSteps() thay vì đoán 1 lệnh = 1 bước,
+        // để luôn khớp chính xác dù 1 dòng lệnh có tạo ra nhiều đối tượng hay không).
+        let stepBlocks = [];
+        let stepBoundaries = [0];
+        let currentStepIndex = 0;
+        let stepModeActive = false;
+
         // --- 4. Cấu hình và Khởi tạo GeoGebra Applet ---
         function initApplet() {
             const container = document.getElementById('ggb-element');
-            
+
+            // Applet sắp được thay mới hoàn toàn -> mọi trạng thái trình chiếu từng bước cũ (nếu có) không còn hợp lệ
+            hideStepModeUI();
+
             // Xóa nội dung cũ để chuẩn bị render applet mới
             container.innerHTML = '';
             ggbAppletAPI = null;
@@ -796,6 +830,62 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
             });
         }
 
+        // Chạy 1 dòng lệnh đã trim (chắc chắn không rỗng / không phải comment).
+        // Dùng chung cho cả "Chạy" bình thường lẫn "Trình chiếu từng bước" để tránh lặp logic.
+        function execSingleLine(cmd) {
+            const soc = parseSetOnClickLine(cmd);
+            if (soc) {
+                try {
+                    applySetOnClick(soc.objName, soc.scriptLines);
+                    return true;
+                } catch (e) {
+                    console.warn("Không gán được SetOnClick cho", soc.objName, e);
+                    return false;
+                }
+            }
+            const result = ggbAppletAPI.evalCommand(cmd);
+            if (result === false) {
+                console.warn("Lệnh lỗi:", cmd);
+                return false;
+            }
+            return true;
+        }
+
+        // Chia mã đã tiền xử lý thành các "khối" (mỗi khối = các dòng liên tiếp không cách nhau
+        // bởi dòng trống). Mỗi khối sẽ là 1 bước khi trình chiếu từng bước. Nếu dòng đầu tiên có
+        // nội dung của khối là comment (// hoặc #), lấy luôn làm tiêu đề hiển thị cho bước đó —
+        // tận dụng đúng các comment giải thích mà giáo viên/AI đã quen viết trong script mẫu.
+        function splitIntoStepBlocks(code) {
+            const rawLines = code.split('\n');
+            const blocks = [];
+            let current = [];
+
+            function flush() {
+                if (!current.length) return;
+                let title = '';
+                for (const l of current) {
+                    const t = l.trim();
+                    if (!t) continue;
+                    if (t.startsWith('//') || t.startsWith('#')) {
+                        title = t.replace(/^\/\/\s?/, '').replace(/^#\s?/, '');
+                    }
+                    break; // chỉ xét dòng có nội dung đầu tiên của khối
+                }
+                blocks.push({ lines: current.slice(), title });
+                current = [];
+            }
+
+            for (const line of rawLines) {
+                if (line.trim() === '') {
+                    flush();
+                } else {
+                    current.push(line);
+                }
+            }
+            flush();
+            return blocks;
+        }
+
         // --- 6. Logic xử lý tương tác UI (Run, Clear, Mode) ---
         const btnRun = document.getElementById('btnRun');
         const btnClear = document.getElementById('btnClear');
@@ -828,6 +918,11 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
 
             showStatus("Đang xử lý mã...");
 
+            // Nếu đang trong chế độ trình chiếu từng bước, chạy lại toàn bộ (nút "Chạy") coi như
+            // hủy phiên trình chiếu hiện tại — vì reset()/newConstruction() bên dưới làm mất hết
+            // các "bước" đã dựng trước đó.
+            hideStepModeUI();
+
             try {
                 // Xóa toàn bộ object cũ trước khi vẽ mới
                 ggbAppletAPI.reset();
@@ -845,28 +940,11 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
                     const cmd = line.trim();
                     // Bỏ qua các dòng chú thích bắt đầu bằng // hoặc # trong vòng lặp thực thi
                     if (cmd && !cmd.startsWith('//') && !cmd.startsWith('#')) {
-                        // "SetOnClick" không phải lệnh GeoGebra thật -> xử lý riêng bằng JS API
-                        const soc = parseSetOnClickLine(cmd);
-                        if (soc) {
-                            try {
-                                applySetOnClick(soc.objName, soc.scriptLines);
-                                successCount++;
-                            } catch (e) {
-                                console.warn("Không gán được SetOnClick cho", soc.objName, e);
-                                failCount++;
-                                failedLines.push(cmd);
-                            }
-                            continue;
-                        }
-
-                        // Gọi hàm evalCommand của GeoGebra API
-                        const result = ggbAppletAPI.evalCommand(cmd);
-                        if (result === false) {
-                            console.warn("Lệnh lỗi:", cmd);
+                        if (execSingleLine(cmd)) {
+                            successCount++;
+                        } else {
                             failCount++;
                             failedLines.push(cmd);
-                        } else {
-                            successCount++;
                         }
                     }
                 }
@@ -892,11 +970,144 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         
         btnClear.addEventListener('click', () => {
             scriptInput.value = '';
+            hideStepModeUI();
             if(ggbAppletAPI) {
                 ggbAppletAPI.reset();
                 ggbAppletAPI.newConstruction();
             }
             showStatus("Đã xóa mã.");
+        });
+
+        // --- 6b. Logic "Trình chiếu từng bước dựng hình" ---
+        const btnStepMode = document.getElementById('btnStepMode');
+        const stepModeOverlay = document.getElementById('stepModeOverlay');
+        const stepModeLabel = document.getElementById('stepModeLabel');
+        const stepModeCaption = document.getElementById('stepModeCaption');
+        const btnStepPrev = document.getElementById('btnStepPrev');
+        const btnStepNext = document.getElementById('btnStepNext');
+        const btnStepExit = document.getElementById('btnStepExit');
+
+        function updateStepUI() {
+            const total = stepBlocks.length;
+            if (stepModeLabel) stepModeLabel.textContent = `Bước ${currentStepIndex} / ${total}`;
+            const shownBlock = currentStepIndex > 0 ? stepBlocks[currentStepIndex - 1] : null;
+            if (stepModeCaption) stepModeCaption.textContent = shownBlock ? shownBlock.title : '';
+            if (btnStepPrev) btnStepPrev.disabled = currentStepIndex <= 0;
+            if (btnStepNext) btnStepNext.disabled = currentStepIndex >= total;
+        }
+
+        function goToStep(idx) {
+            if (!stepModeActive || !ggbAppletAPI) return;
+            const total = stepBlocks.length;
+            const clamped = Math.max(0, Math.min(total, idx));
+            if (clamped === currentStepIndex) return;
+            currentStepIndex = clamped;
+            ggbAppletAPI.setConstructionStep(stepBoundaries[currentStepIndex]);
+            updateStepUI();
+        }
+
+        // Chỉ ẩn giao diện + tắt cờ trạng thái — KHÔNG đụng vào ggbAppletAPI. Dùng khi applet
+        // sắp bị thay mới hoặc mã sắp được chạy lại từ đầu (những chỗ đó tự lo việc dựng lại hình).
+        function hideStepModeUI() {
+            stepModeActive = false;
+            if (stepModeOverlay) stepModeOverlay.classList.add('hidden');
+            if (btnStepMode) btnStepMode.classList.remove('ring-2', 'ring-amber-300', 'bg-amber-600');
+        }
+
+        // Người dùng chủ động bấm "Thoát" — ngoài ẩn UI còn đưa hình về trạng thái đầy đủ (bước cuối).
+        function exitStepMode() {
+            if (ggbAppletAPI && stepBoundaries.length) {
+                try { ggbAppletAPI.setConstructionStep(stepBoundaries[stepBoundaries.length - 1]); } catch (e) { /* bỏ qua */ }
+            }
+            hideStepModeUI();
+            showStatus('Đã thoát trình chiếu từng bước — hiển thị đầy đủ hình.');
+        }
+
+        function enterStepMode() {
+            if (!ggbAppletAPI) { showStatus('GeoGebra chưa tải xong, chưa thể trình chiếu!', true); return; }
+            const rawCode = scriptInput.value;
+            if (!rawCode.trim()) { showStatus('Mã trống, không có gì để trình chiếu!', true); return; }
+
+            showStatus('Đang chuẩn bị trình chiếu từng bước...');
+
+            try {
+                ggbAppletAPI.reset();
+                ggbAppletAPI.newConstruction();
+
+                const processedCode = preprocessGGBScript(rawCode);
+                stepBlocks = splitIntoStepBlocks(processedCode);
+
+                if (!stepBlocks.length) {
+                    showStatus('Không tìm thấy lệnh nào trong mã để trình chiếu.', true);
+                    return;
+                }
+
+                stepBoundaries = [0];
+                let successCount = 0;
+                let failCount = 0;
+                const failedLines = [];
+
+                for (const block of stepBlocks) {
+                    for (const rawLine of block.lines) {
+                        const cmd = rawLine.trim();
+                        if (cmd && !cmd.startsWith('//') && !cmd.startsWith('#')) {
+                            if (execSingleLine(cmd)) {
+                                successCount++;
+                            } else {
+                                failCount++;
+                                failedLines.push(cmd);
+                            }
+                        }
+                    }
+                    stepBoundaries.push(ggbAppletAPI.getConstructionSteps());
+                }
+
+                stepModeActive = true;
+                currentStepIndex = 0;
+                ggbAppletAPI.setConstructionStep(0);
+                updateStepUI();
+
+                if (stepModeOverlay) stepModeOverlay.classList.remove('hidden');
+                if (btnStepMode) btnStepMode.classList.add('ring-2', 'ring-amber-300', 'bg-amber-600');
+
+                if (failCount > 0) {
+                    statusText.title = 'Các dòng lỗi:\n' + failedLines.join('\n');
+                    showStatus(`Đã dựng xong ${stepBlocks.length} bước (${failCount} lệnh lỗi). Dùng ◀ ▶ hoặc phím mũi tên để trình chiếu.`, true);
+                } else {
+                    statusText.title = '';
+                    showStatus(`Sẵn sàng trình chiếu ${stepBlocks.length} bước. Dùng ◀ ▶ hoặc phím mũi tên trên bàn phím.`);
+                }
+            } catch (err) {
+                console.error(err);
+                showStatus('Lỗi khi chuẩn bị trình chiếu từng bước.', true);
+            }
+        }
+
+        if (btnStepMode) {
+            btnStepMode.addEventListener('click', () => {
+                if (stepModeActive) exitStepMode();
+                else enterStepMode();
+            });
+        }
+        if (btnStepPrev) btnStepPrev.addEventListener('click', () => goToStep(currentStepIndex - 1));
+        if (btnStepNext) btnStepNext.addEventListener('click', () => goToStep(currentStepIndex + 1));
+        if (btnStepExit) btnStepExit.addEventListener('click', exitStepMode);
+
+        // Phím mũi tên trái/phải để lật bước khi đang trình chiếu (bỏ qua khi đang gõ trong ô nhập liệu)
+        document.addEventListener('keydown', (e) => {
+            if (!stepModeActive) return;
+            const activeTag = document.activeElement && document.activeElement.tagName;
+            if (activeTag === 'TEXTAREA' || activeTag === 'INPUT' || activeTag === 'SELECT') return;
+
+            if (e.key === 'ArrowRight') {
+                goToStep(currentStepIndex + 1);
+                e.preventDefault();
+            } else if (e.key === 'ArrowLeft') {
+                goToStep(currentStepIndex - 1);
+                e.preventDefault();
+            } else if (e.key === 'Escape') {
+                exitStepMode();
+            }
         });
 
         // Phím tắt Ctrl + Enter để chạy và Tab để thụt lề
