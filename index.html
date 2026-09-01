@@ -578,6 +578,11 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         // --- 3. Biến toàn cục cho API GeoGebra ---
         let ggbAppletAPI = null;
         let currentMode = "classic"; // 'classic' cho 2D, '3d' cho 3D
+        // Khi cần đổi chế độ 2D/3D (khởi tạo lại applet) TRƯỚC KHI khôi phục 1 mục thư viện
+        // đã lưu kèm trạng thái màn hình (getBase64), 2 biến này giữ tạm dữ liệu cần khôi phục
+        // để appletOnLoad gọi setBase64 ngay khi applet mới tải xong, thay vì chạy lại mã.
+        let pendingRestoreBase64 = null;
+        let pendingRestoreName = '';
 
         // --- 4. Cấu hình và Khởi tạo GeoGebra Applet ---
         function initApplet() {
@@ -622,7 +627,17 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
                 "appletOnLoad": function(api) {
                     ggbAppletAPI = api;
                     console.log(`GeoGebra loaded in ${currentMode} mode!`);
-                    runScript();
+                    if (pendingRestoreBase64) {
+                        const b64 = pendingRestoreBase64;
+                        const nm = pendingRestoreName;
+                        pendingRestoreBase64 = null;
+                        pendingRestoreName = '';
+                        ggbAppletAPI.setBase64(b64, function() {
+                            showStatus(`Đã khôi phục "${nm}" (kèm chỉnh sửa tay đã lưu).`);
+                        });
+                    } else {
+                        runScript();
+                    }
                 },
                 "language": "vi"
             };
@@ -1143,15 +1158,34 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         }
 
         function loadLibraryItem(item) {
-            scriptInput.value = item.script;
-            if (item.mode !== currentMode) {
-                modeSelect.value = item.mode;
-                currentMode = item.mode;
-                initApplet();
+            scriptInput.value = item.script || '';
+
+            if (item.ggbBase64) {
+                // Có bản chụp trạng thái màn hình đã lưu -> khôi phục CHÍNH XÁC (kể cả
+                // chỉnh sửa tay), không chạy lại mã từ đầu.
+                if (item.mode !== currentMode) {
+                    modeSelect.value = item.mode;
+                    currentMode = item.mode;
+                    pendingRestoreBase64 = item.ggbBase64;
+                    pendingRestoreName = item.name;
+                    initApplet(); // sẽ tự setBase64 trong appletOnLoad khi tải xong
+                } else {
+                    showStatus(`Đang khôi phục "${item.name}"...`);
+                    ggbAppletAPI.setBase64(item.ggbBase64, function() {
+                        showStatus(`Đã khôi phục "${item.name}" (kèm chỉnh sửa tay đã lưu).`);
+                    });
+                }
             } else {
-                runScript();
+                // Mục cũ lưu trước khi có tính năng chụp màn hình -> chạy lại từ mã code
+                if (item.mode !== currentMode) {
+                    modeSelect.value = item.mode;
+                    currentMode = item.mode;
+                    initApplet();
+                } else {
+                    runScript();
+                }
+                showStatus(`Đã nạp "${item.name}" từ thư viện.`);
             }
-            showStatus(`Đã nạp "${item.name}" từ thư viện.`);
         }
 
         function deleteLibraryItem(item) {
@@ -1185,7 +1219,24 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
             nameModalOverlay.classList.remove('flex');
         }
 
-        function confirmNameModal() {
+        // Chụp lại trạng thái THẬT SỰ đang hiển thị trên màn hình làm việc GeoGebra
+        // (kể cả khi giáo viên đã kéo điểm, đổi màu, thêm bớt đối tượng bằng tay qua
+        // thanh công cụ chứ không chỉ gõ lệnh) - dùng API getBase64 (chụp toàn bộ construction),
+        // để lúc nạp lại (setBase64) khôi phục CHÍNH XÁC những gì đã chỉnh sửa, không chỉ chạy
+        // lại đoạn mã gốc ban đầu.
+        function captureCurrentGgbState() {
+            return new Promise((resolve) => {
+                if (!ggbAppletAPI || typeof ggbAppletAPI.getBase64 !== 'function') { resolve(null); return; }
+                try {
+                    ggbAppletAPI.getBase64(function(b64) { resolve(b64 || null); });
+                } catch (e) {
+                    console.warn('Không lấy được trạng thái GeoGebra hiện tại:', e);
+                    resolve(null);
+                }
+            });
+        }
+
+        async function confirmNameModal() {
             const val = nameModalInput.value.trim();
             const grade = gradeModalSelect.value;
             if (!val) {
@@ -1195,19 +1246,23 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
             }
             localStorage.setItem(LAST_GRADE_KEY, grade);
             if (nameModalMode === 'save') {
+                closeNameModal();
+                showStatus('Đang lưu trạng thái hiện tại trên màn hình...');
+                const ggbBase64 = await captureCurrentGgbState();
                 const item = {
                     id: genId(),
                     grade: grade,
                     name: val,
                     mode: currentMode,
                     script: scriptInput.value,
+                    ggbBase64: ggbBase64,
                     updatedAt: new Date().toISOString()
                 };
                 libraryItems.push(item);
                 saveLocalLibrary(libraryItems);
                 renderLibrary();
-                closeNameModal();
                 activateTab('library');
+                showStatus(ggbBase64 ? `Đã lưu "${val}" (kèm chỉnh sửa tay trên màn hình).` : `Đã lưu "${val}" (chỉ lưu mã code).`);
                 pushToSheet(item);
             } else if (nameModalEditItem) {
                 nameModalEditItem.grade = grade;
@@ -1221,7 +1276,11 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         }
 
         btnSaveToLibrary.addEventListener('click', () => {
-            if (!scriptInput.value.trim()) { showStatus('Không có mã để lưu!', true); return; }
+            // Không bắt buộc phải có mã trong ô Code: giáo viên có thể đã chỉnh sửa trực tiếp
+            // trên màn hình làm việc GeoGebra (kéo điểm, đổi màu qua thanh công cụ...) mà
+            // không gõ lệnh nào - khi lưu, trạng thái HIỆN TẠI trên màn hình vẫn được chụp lại
+            // đầy đủ (xem confirmNameModal / getBase64 bên dưới).
+            if (!ggbAppletAPI) { showStatus('GeoGebra chưa tải xong, chưa thể lưu!', true); return; }
             openNameModal('save', null);
         });
         nameModalCancel.addEventListener('click', closeNameModal);
@@ -1233,19 +1292,35 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         });
 
         // --- Đồng bộ Google Sheet qua Google Apps Script Web App ---
+        // Mỗi ô trong Google Sheet giới hạn khoảng 50.000 ký tự. Bản chụp màn hình
+        // (getBase64) của bài dựng hình phức tạp có thể vượt mức này -> nếu quá lớn thì
+        // KHÔNG đẩy phần đó lên Sheet (vẫn giữ đầy đủ trong localStorage của trình duyệt),
+        // tránh làm hỏng cả lần đồng bộ.
+        const SHEET_CELL_SAFE_LIMIT = 45000;
+
         async function pushToSheet(item) {
             const url = getWebAppUrl();
             if (!url) { setSyncStatus('Đã lưu cục bộ (chưa cấu hình Google Sheet).', 'warn'); return; }
             setSyncStatus('Đang đồng bộ lên Google Sheet...', 'info');
+            const tooLarge = item.ggbBase64 && item.ggbBase64.length > SHEET_CELL_SAFE_LIMIT;
             try {
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // tránh preflight CORS với Apps Script
-                    body: JSON.stringify({ action: 'upsert', id: item.id, grade: itemGrade(item), name: item.name, mode: item.mode, script: item.script, updatedAt: item.updatedAt })
+                    body: JSON.stringify({
+                        action: 'upsert', id: item.id, grade: itemGrade(item), name: item.name, mode: item.mode,
+                        script: item.script, updatedAt: item.updatedAt,
+                        ggbBase64: tooLarge ? '' : (item.ggbBase64 || '')
+                    })
                 });
                 const json = await res.json();
-                if (json && json.ok) setSyncStatus('Đã đồng bộ lên Google Sheet lúc ' + nowStr() + '.', 'ok');
-                else setSyncStatus('Lỗi đồng bộ: ' + (json && json.error ? json.error : 'không rõ nguyên nhân'), 'error');
+                if (json && json.ok) {
+                    setSyncStatus(tooLarge
+                        ? 'Đã đồng bộ (bản chụp màn hình quá lớn, chỉ đồng bộ mã code).'
+                        : 'Đã đồng bộ lên Google Sheet lúc ' + nowStr() + '.', tooLarge ? 'warn' : 'ok');
+                } else {
+                    setSyncStatus('Lỗi đồng bộ: ' + (json && json.error ? json.error : 'không rõ nguyên nhân'), 'error');
+                }
             } catch (err) {
                 console.error(err);
                 setSyncStatus('Đã lưu cục bộ, nhưng không kết nối được Google Sheet.', 'error');
@@ -1298,7 +1373,7 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
   var sheet = ss.getSheetByName('Library');
   if (!sheet) {
     sheet = ss.insertSheet('Library');
-    sheet.appendRow(['id', 'grade', 'name', 'mode', 'script', 'updatedAt']);
+    sheet.appendRow(['id', 'grade', 'name', 'mode', 'script', 'updatedAt', 'ggbBase64']);
   }
   return sheet;
 }
@@ -1315,7 +1390,8 @@ function doGet(e) {
       name: data[i][2],
       mode: data[i][3],
       script: data[i][4],
-      updatedAt: data[i][5]
+      updatedAt: data[i][5],
+      ggbBase64: data[i][6] || ''
     });
   }
   return ContentService.createTextOutput(JSON.stringify({ ok: true, items: rows }))
@@ -1334,9 +1410,9 @@ function doPost(e) {
       for (var i = 1; i < data.length; i++) {
         if (data[i][0] === body.id) { rowIndex = i + 1; break; }
       }
-      var rowValues = [body.id, body.grade || 'Khác', body.name, body.mode, body.script, body.updatedAt];
+      var rowValues = [body.id, body.grade || 'Khác', body.name, body.mode, body.script, body.updatedAt, body.ggbBase64 || ''];
       if (rowIndex > 0) {
-        sheet.getRange(rowIndex, 1, 1, 6).setValues([rowValues]);
+        sheet.getRange(rowIndex, 1, 1, 7).setValues([rowValues]);
       } else {
         sheet.appendRow(rowValues);
       }
