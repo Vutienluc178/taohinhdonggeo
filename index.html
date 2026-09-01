@@ -166,12 +166,18 @@
                     <button id="btnResetViewMobile" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
                         Reset View
                     </button>
+                    <button id="btnExportPngMobile" class="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md transition-colors" title="Xuất ảnh PNG nền trong suốt, chất lượng cao">
+                        <i class="fa-solid fa-image"></i>
+                    </button>
                 </div>
             </div>
-            
+
             <div class="absolute top-4 right-4 z-10 hidden lg:flex gap-2">
                 <button id="btnResetView" class="px-3 py-2 bg-white/80 backdrop-blur border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-md shadow-sm transition-all flex items-center gap-2 text-sm font-medium" title="Đặt lại góc nhìn">
                     <i class="fa-solid fa-compress"></i> <span>Căn giữa</span>
+                </button>
+                <button id="btnExportPng" class="px-3 py-2 bg-white/80 backdrop-blur border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-md shadow-sm transition-all flex items-center gap-2 text-sm font-medium" title="Xuất ảnh PNG nền trong suốt, chất lượng cao (x4)">
+                    <i class="fa-solid fa-image text-emerald-600"></i> <span>Xuất PNG</span>
                 </button>
                 <button id="btnFullscreen" class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-md shadow-sm transition-all flex items-center gap-2 text-sm font-medium" title="Trình chiếu toàn màn hình">
                     <i class="fa-solid fa-expand"></i> <span>Trình chiếu</span>
@@ -1135,6 +1141,70 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         btnResetView.addEventListener('click', resetStandardView);
         if(btnResetViewMobile) btnResetViewMobile.addEventListener('click', resetStandardView);
 
+        // --- 6c. Xuất ảnh PNG nền trong suốt, chất lượng cao ---
+        // Lưu ý quan trọng (theo tài liệu chính thức GeoGebra Apps API): getPNGBase64() CHỈ hoạt
+        // động cho khung nhìn 2D — nếu khung nhìn đang hoạt động là 3D thì hàm này trả về null.
+        // Với 3D, GeoGebra chỉ hỗ trợ xuất ảnh qua lệnh ExportImage("view", -1, ...), và lệnh này
+        // chạy trong app nhúng qua trình duyệt (không phải Desktop) nên không đảm bảo chắc chắn
+        // tự động tải file 100% các trường hợp -> vẫn thử gọi, nhưng luôn cho người dùng biết
+        // cách dự phòng chắc chắn hoạt động (menu ☰ có sẵn của GeoGebra) để không bị "mất tác dụng"
+        // mà không rõ lý do.
+        const EXPORT_PNG_SCALE = 4; // độ phân giải gấp 4 lần màn hình hiển thị -> đủ nét để in/chiếu lớn
+
+        function buildExportFileName() {
+            const d = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+            return `geogebra_${stamp}.png`;
+        }
+
+        function downloadBase64Png(base64, filename) {
+            const a = document.createElement('a');
+            a.href = 'data:image/png;base64,' + base64;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function exportPng() {
+            if (!ggbAppletAPI) { showStatus('GeoGebra chưa tải xong, chưa thể xuất ảnh!', true); return; }
+
+            const fallbackHint = 'Hãy dùng menu ☰ (góc trên bên trái khung hình) → Tải xuống dạng → Hình ảnh PNG.';
+
+            try {
+                if (currentMode === '3d') {
+                    // Khung nhìn 3D: getPNGBase64 không dùng được (luôn trả null), phải nhờ chính
+                    // GeoGebra xử lý qua lệnh ExportImage.
+                    const fname = buildExportFileName();
+                    const cmd = `ExportImage["filename","${fname}","view",-1,"transparent",true,"scale",${EXPORT_PNG_SCALE}]`;
+                    const ok = ggbAppletAPI.evalCommand(cmd);
+                    if (ok === false) {
+                        showStatus('Không xuất được ảnh 3D bằng phím tắt. ' + fallbackHint, true);
+                    } else {
+                        showStatus('Đang xuất ảnh 3D (nền trong suốt)... Nếu trình duyệt không tự tải file sau vài giây: ' + fallbackHint);
+                    }
+                } else {
+                    // Khung nhìn 2D: getPNGBase64 là API chính thức, đồng bộ, đáng tin cậy.
+                    const base64 = ggbAppletAPI.getPNGBase64(EXPORT_PNG_SCALE, true, undefined);
+                    if (!base64) {
+                        showStatus('Không xuất được ảnh. ' + fallbackHint, true);
+                        return;
+                    }
+                    downloadBase64Png(base64, buildExportFileName());
+                    showStatus(`Đã xuất ảnh PNG chất lượng cao (nền trong suốt, x${EXPORT_PNG_SCALE}).`);
+                }
+            } catch (err) {
+                console.error(err);
+                showStatus('Lỗi khi xuất ảnh PNG. ' + fallbackHint, true);
+            }
+        }
+
+        const btnExportPng = document.getElementById('btnExportPng');
+        const btnExportPngMobile = document.getElementById('btnExportPngMobile');
+        if (btnExportPng) btnExportPng.addEventListener('click', exportPng);
+        if (btnExportPngMobile) btnExportPngMobile.addEventListener('click', exportPng);
+
         // --- 7. Chức năng Fullscreen (Trình chiếu) ---
         const geogebraSection = document.getElementById('geogebra-section');
         const btnFullscreen = document.getElementById('btnFullscreen');
@@ -1296,7 +1366,12 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
 
         // --- Render danh sách thư viện ---
         function itemGrade(item) {
-            return (item.grade && GRADE_ORDER.includes(item.grade)) ? item.grade : 'Khác';
+            // Ép về chuỗi trước khi so sánh: Google Sheets tự động lưu các ô "10"/"11"/"12" thành
+            // KIỂU SỐ (number) chứ không phải chữ, nên sau khi đồng bộ (pullFromSheet), item.grade
+            // có thể là số 10 thay vì chuỗi "10" -> so sánh thẳng với GRADE_ORDER (toàn chuỗi) sẽ
+            // luôn sai kiểu và rơi hết vào "Khác". Ép String() ở đây xử lý cả 2 trường hợp.
+            const g = (item.grade === undefined || item.grade === null) ? '' : String(item.grade).trim();
+            return GRADE_ORDER.includes(g) ? g : 'Khác';
         }
 
         function renderLibraryRow(item) {
