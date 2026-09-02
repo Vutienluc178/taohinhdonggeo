@@ -115,6 +115,9 @@
                     <button id="btnInsertCode" class="px-2 py-1 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition-colors flex items-center gap-1" title="Chèn thêm mã vẽ vào CÙNG hình đang có (không xóa hình cũ)">
                         <i class="fa-solid fa-layer-group"></i>
                     </button>
+                    <button id="btnExportCode" class="px-2 py-1 text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-md shadow-sm transition-colors flex items-center gap-1" title="Xuất mã theo ĐÚNG hình đang có trên màn hình (kể cả đã kéo điểm, đổi màu, thêm/bớt bằng tay) — để copy và áp dụng cho hình khác">
+                        <i class="fa-solid fa-file-export"></i>
+                    </button>
                 </div>
             </div>
 
@@ -305,6 +308,29 @@
             <div class="flex justify-end gap-2 mt-2">
                 <button id="codeModalCancel" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">Hủy</button>
                 <button id="codeModalInsert" class="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors">Chèn vào hình</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Xuất mã theo hình đang có trên màn hình (kể cả đã sửa bằng tay) -->
+    <div id="exportModalOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-xl p-4">
+            <h3 class="text-sm font-semibold text-slate-800 mb-1 flex items-center gap-2">
+                <i class="fa-solid fa-file-export text-teal-600"></i> Xuất mã theo hình đang có trên màn hình
+            </h3>
+            <p class="text-[11px] text-slate-500 mb-3">Mã dưới đây được tạo lại từ TRẠNG THÁI HIỆN TẠI của hình vẽ — kể cả những chỗ đã kéo điểm, đổi màu, ẩn/hiện, thêm hoặc xóa đối tượng bằng tay qua thanh công cụ GeoGebra chứ không chỉ những gì đã gõ ở ô Code. Có thể sao chép để chỉnh sửa, áp dụng cho một hình/bài toán khác.</p>
+
+            <textarea id="exportModalOutput" rows="12" readonly class="w-full border border-slate-200 rounded-md px-3 py-2 text-xs code-font mb-1 bg-slate-50 text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-teal-500"></textarea>
+
+            <p id="exportModalWarning" class="text-[10.5px] text-amber-600 mb-2 hidden">
+                <i class="fa-solid fa-circle-info"></i> Lưu ý: những đối tượng có ghi chú <span class="code-font">// [Không tự xuất được lệnh...]</span> là nút bấm có gán hành động khi bấm (SetOnClick) — GeoGebra không cho đọc lại hành động đó, cần tự gõ lại dòng SetOnClick nếu muốn giữ.
+            </p>
+            <p id="exportModalEmpty" class="text-[11px] text-slate-500 mb-2 hidden">Màn hình đang trống, chưa có gì để xuất.</p>
+
+            <div class="flex justify-end gap-2 mt-2">
+                <button id="exportModalClose" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">Đóng</button>
+                <button id="exportModalCopy" class="px-3 py-1.5 text-xs font-medium text-white bg-slate-600 hover:bg-slate-700 rounded-md shadow-sm transition-colors flex items-center gap-1"><i class="fa-solid fa-copy"></i> Sao chép</button>
+                <button id="exportModalApply" class="px-3 py-1.5 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-md shadow-sm transition-colors flex items-center gap-1"><i class="fa-solid fa-arrow-left"></i> Ghi đè vào ô Code</button>
             </div>
         </div>
     </div>
@@ -641,6 +667,939 @@ SetConditionToShowObject(toBu, chkBu)
 // 6. Nút bấm hoạt ảnh: tự động chạy Slider t để Tập B "quét" qua Tập A
 btnDiChuyenB = Button("Di chuyển tập B")
 SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
+            },
+            {
+                title: "9. Tiếp tuyến và cát tuyến từ điểm ngoài đường tròn",
+                mode: "classic",
+                script: `// Bài toán kinh điển: Cho đường tròn (O; R), điểm M nằm ngoài đường tròn.
+// Từ M kẻ hai tiếp tuyến MA, MB (A, B là tiếp điểm) và một cát tuyến MCD
+// cắt đường tròn tại C, D. Kéo điểm C trên đường tròn để xoay cát tuyến quanh M.
+
+O = (0, 0)
+R = 3
+duongTron = Circle(O, R)
+SetColor(duongTron, "Blue")
+
+M = (7, 2)
+
+// 1) Dựng 2 tiếp tuyến từ M bằng tính chất: tiếp điểm nằm trên đường tròn
+// đường kính OM (vì góc OAM = góc OBM = 90°)
+I = Midpoint(O, M)
+duongTronPhu = Circle(I, O)
+SetColor(duongTronPhu, "Grey")
+SetLineStyle(duongTronPhu, 1)
+
+A = Intersect(duongTron, duongTronPhu, 1)
+B = Intersect(duongTron, duongTronPhu, 2)
+tiepTuyenA = Line(M, A)
+tiepTuyenB = Line(M, B)
+SetColor(tiepTuyenA, "Red")
+SetColor(tiepTuyenB, "Red")
+
+// 2) Cát tuyến MCD: kéo điểm C trên đường tròn để thay đổi cát tuyến
+C = Point(duongTron)
+SetValue(C, (-2, 2.2))
+catTuyen = Line(M, C)
+SetColor(catTuyen, "Green")
+
+d1 = Intersect(catTuyen, duongTron, 1)
+d2 = Intersect(catTuyen, duongTron, 2)
+D = If(Distance(d1, C) < 0.01, d2, d1)
+
+// 3) Minh họa hệ thức lượng: MA² = MC.MD (phương tích của M đối với (O))
+Text("MA² = " + (Distance(M,A))^2, (-9, 8), false, false)
+Text("MC.MD = " + (Distance(M,C) * Distance(M,D)), (-9, 7), false, false)`
+            },
+            {
+                title: "10. Trực tâm tam giác nhọn nội tiếp đường tròn",
+                mode: "classic",
+                script: `// Cho tam giác ABC nhọn, ba đường cao AD, BE, CF cắt nhau tại trực tâm H.
+// (O) là đường tròn ngoại tiếp tam giác ABC. Kéo A, B, C để xem H luôn thay đổi
+// theo, nhưng luôn là giao 3 đường cao.
+
+A = (0, 4)
+B = (-3.8, -1.5)
+C = (3.8, -1.5)
+tamGiac = Polygon(A, B, C)
+SetColor(tamGiac, "Green")
+SetFilling(tamGiac, 0.15)
+
+duongTron = Circle(A, B, C)
+SetColor(duongTron, "Blue")
+O = Center(duongTron)
+
+// Ba đường cao
+duongCaoA = PerpendicularLine(A, Line(B, C))
+duongCaoB = PerpendicularLine(B, Line(A, C))
+duongCaoC = PerpendicularLine(C, Line(A, B))
+SetLineStyle(duongCaoA, 1)
+SetLineStyle(duongCaoB, 1)
+SetLineStyle(duongCaoC, 1)
+
+D = Intersect(duongCaoA, Line(B, C))
+E = Intersect(duongCaoB, Line(A, C))
+F = Intersect(duongCaoC, Line(A, B))
+
+H = Intersect(duongCaoA, duongCaoB)
+SetPointSize(H, 5)
+SetColor(H, "Red")
+
+Text("H là trực tâm tam giác ABC (giao của 3 đường cao)", (-9, 8), false, false)
+Text("Các tứ giác BFEC, AFHE, BDHF, CEHD đều là tứ giác nội tiếp", (-9, 7), false, false)`
+            },
+            {
+                title: "11. Nửa đường tròn đường kính AB (hệ thức lượng)",
+                mode: "classic",
+                script: `// Cho nửa đường tròn (O) đường kính AB, điểm C thuộc nửa đường tròn (C khác A, B).
+// Kẻ CH vuông góc AB tại H. Vì góc ACB = 90° (góc nội tiếp chắn nửa đường tròn)
+// nên tam giác ABC vuông tại C. Kéo điểm C để xem các hệ thức lượng luôn đúng.
+
+A = (-4, 0)
+B = (4, 0)
+nuaDuongTron = Semicircle(A, B)
+SetColor(nuaDuongTron, "Blue")
+
+C = Point(nuaDuongTron)
+SetValue(C, (-1, 3.87))
+
+tamGiac = Polygon(A, B, C)
+SetColor(tamGiac, "Green")
+SetFilling(tamGiac, 0.15)
+
+duongThangAB = Line(A, B)
+H = Intersect(PerpendicularLine(C, duongThangAB), duongThangAB)
+duongCaoCH = Segment(C, H)
+SetColor(duongCaoCH, "Red")
+SetLineThickness(duongCaoCH, 3)
+
+Text("Góc ACB = 90° (góc nội tiếp chắn nửa đường tròn)", (-9, 8), false, false)
+Text("CH² = " + (Distance(C,H))^2 + "   ,   HA.HB = " + (Distance(H,A) * Distance(H,B)), (-9, 7), false, false)
+Text("AC² = " + (Distance(A,C))^2 + "   ,   AH.AB = " + (Distance(A,H) * Distance(A,B)), (-9, 6), false, false)`
+            },
+            {
+                title: "12. Hai đường tròn cắt nhau - dây chung",
+                mode: "classic",
+                script: `// Cho hai đường tròn (O1) và (O2) cắt nhau tại hai điểm A, B. AB gọi là dây chung.
+// Tính chất: đường nối tâm O1O2 là đường trung trực của dây chung AB (vuông góc
+// và đi qua trung điểm AB). Kéo Slider r1, r2 để đổi bán kính, hai đường tròn
+// vẫn luôn cắt nhau.
+
+r1 = Slider(2.5, 5, 0.1)
+SetValue(r1, 3)
+r2 = Slider(2.5, 5, 0.1)
+SetValue(r2, 3.5)
+
+O1 = (-2, 0)
+O2 = (2, 0)
+duongTron1 = Circle(O1, r1)
+duongTron2 = Circle(O2, r2)
+SetColor(duongTron1, "Blue")
+SetColor(duongTron2, "Red")
+SetFilling(duongTron1, 0.1)
+SetFilling(duongTron2, 0.1)
+
+A = Intersect(duongTron1, duongTron2, 1)
+B = Intersect(duongTron1, duongTron2, 2)
+
+dayChung = Segment(A, B)
+SetColor(dayChung, "Green")
+SetLineThickness(dayChung, 3)
+
+duongNoiTam = Line(O1, O2)
+SetLineStyle(duongNoiTam, 1)
+
+Text("O1O2 vuông góc với dây chung AB tại trung điểm của AB", (-9, 8), false, false)`
+            },
+            {
+                title: "13. Điểm ngoài đường tròn với hai cát tuyến",
+                mode: "classic",
+                script: `// Cho đường tròn (O; R) và điểm M ở ngoài đường tròn. Từ M kẻ hai cát tuyến:
+// cát tuyến 1 cắt (O) tại A, B; cát tuyến 2 cắt (O) tại C, D.
+// Tính chất: MA.MB = MC.MD (cùng bằng phương tích của M đối với (O)).
+// Kéo điểm A hoặc C trên đường tròn để xoay từng cát tuyến.
+
+O = (0, 0)
+R = 3
+duongTron = Circle(O, R)
+SetColor(duongTron, "Blue")
+
+M = (8, 1)
+
+A = Point(duongTron)
+SetValue(A, (-2, 2.2))
+catTuyen1 = Line(M, A)
+SetColor(catTuyen1, "Green")
+a1 = Intersect(catTuyen1, duongTron, 1)
+a2 = Intersect(catTuyen1, duongTron, 2)
+B = If(Distance(a1, A) < 0.01, a2, a1)
+
+C = Point(duongTron)
+SetValue(C, (1, -2.8))
+catTuyen2 = Line(M, C)
+SetColor(catTuyen2, "Purple")
+c1 = Intersect(catTuyen2, duongTron, 1)
+c2 = Intersect(catTuyen2, duongTron, 2)
+D = If(Distance(c1, C) < 0.01, c2, c1)
+
+Text("MA.MB = " + (Distance(M,A) * Distance(M,B)), (-9, 8), false, false)
+Text("MC.MD = " + (Distance(M,C) * Distance(M,D)), (-9, 7), false, false)
+Text("Hai kết quả trên luôn bằng nhau, bằng phương tích của M đối với (O)", (-9, 6), false, false)`
+            },
+            {
+                title: "14. Tam giác vuông với 2 đường tròn đường kính hai cạnh góc vuông",
+                mode: "classic",
+                script: `// Cho tam giác ABC vuông tại A, đường cao AH (H thuộc BC). Dựng đường tròn
+// đường kính AB và đường tròn đường kính AC. Tính chất: cả hai đường tròn đều
+// đi qua H (vì góc AHB = góc AHC = 90°).
+
+A = (0, 0)
+B = (0, 5)
+C = (7, 0)
+tamGiac = Polygon(A, B, C)
+SetColor(tamGiac, "Green")
+SetFilling(tamGiac, 0.12)
+
+duongTronAB = Circle(Midpoint(A, B), A)
+duongTronAC = Circle(Midpoint(A, C), A)
+SetColor(duongTronAB, "Blue")
+SetColor(duongTronAC, "Red")
+SetFilling(duongTronAB, 0.1)
+SetFilling(duongTronAC, 0.1)
+
+H = Intersect(PerpendicularLine(A, Line(B, C)), Line(B, C))
+duongCaoAH = Segment(A, H)
+SetLineThickness(duongCaoAH, 3)
+
+Text("H nằm trên cả hai đường tròn đường kính AB và đường kính AC", (-2, 7), false, false)
+Text("(vì góc AHB = góc AHC = 90°)", (-2, 6), false, false)`
+            },
+            {
+                title: "15. Quỹ tích trực tâm khi 1 đỉnh di chuyển trên đường tròn",
+                mode: "classic",
+                script: `// Cho đường tròn (O; R) cố định và dây BC cố định (không qua tâm). Điểm A di
+// chuyển trên đường tròn (chỉ xét cung lớn BC để tam giác ABC luôn nhọn).
+// Trực tâm H của tam giác ABC vẽ nên một quỹ tích. Kéo A quanh đường tròn.
+
+O = (0, 0)
+R = 4
+duongTron = Circle(O, R)
+SetColor(duongTron, "Blue")
+
+B = (-3.2, -2.4)
+C = (3.2, -2.4)
+dayBC = Segment(B, C)
+SetColor(dayBC, "Grey")
+
+A = Point(duongTron)
+SetValue(A, (0, 4))
+
+tamGiac = Polygon(A, B, C)
+SetColor(tamGiac, "Green")
+SetFilling(tamGiac, 0.15)
+
+duongCaoA = PerpendicularLine(A, Line(B, C))
+duongCaoB = PerpendicularLine(B, Line(A, C))
+H = Intersect(duongCaoA, duongCaoB)
+SetColor(H, "Red")
+SetPointSize(H, 5)
+
+quyTich = Locus(H, A)
+SetColor(quyTich, "Orange")
+SetLineThickness(quyTich, 3)
+
+Text("Kéo điểm A quanh đường tròn (chỉ xét cung lớn BC để tam giác luôn nhọn)", (-9, 8), false, false)
+Text("Quỹ tích của trực tâm H là một đường tròn cố định", (-9, 7), false, false)`
+            },
+            {
+                title: "16. Phân giác góc A cắt đường tròn - điểm chính giữa cung",
+                mode: "classic",
+                script: `// Cho tam giác ABC nội tiếp đường tròn (O). Tia phân giác trong góc A cắt (O)
+// tại D (D là điểm chính giữa cung BC không chứa A). Gọi I là tâm đường tròn
+// nội tiếp tam giác ABC. Tính chất nổi tiếng: DB = DC = DI.
+
+A = (-1, 4)
+B = (-4, -2)
+C = (4, -1)
+tamGiac = Polygon(A, B, C)
+SetColor(tamGiac, "Green")
+SetFilling(tamGiac, 0.12)
+
+duongTron = Circle(A, B, C)
+SetColor(duongTron, "Blue")
+
+I = TriangleCenter(A, B, C, 1)
+SetColor(I, "Purple")
+SetPointSize(I, 5)
+
+duongPhanGiacA = Line(A, I)
+d1 = Intersect(duongPhanGiacA, duongTron, 1)
+d2 = Intersect(duongPhanGiacA, duongTron, 2)
+D = If(Distance(d1, A) > Distance(d2, A), d1, d2)
+SetColor(D, "Red")
+SetPointSize(D, 5)
+
+duongTronD = Circle(D, B)
+SetColor(duongTronD, "Orange")
+SetLineStyle(duongTronD, 1)
+
+doanDB = Segment(D, B)
+doanDC = Segment(D, C)
+doanDI = Segment(D, I)
+SetLineThickness(doanDB, 2)
+SetLineThickness(doanDC, 2)
+SetLineThickness(doanDI, 2)
+
+Text("DB = " + Distance(D,B), (-9, 8), false, false)
+Text("DC = " + Distance(D,C), (-9, 7), false, false)
+Text("DI = " + Distance(D,I), (-9, 6), false, false)`
+            },
+            {
+                title: "17. Tứ giác nội tiếp - hai đường chéo cắt nhau",
+                mode: "classic",
+                script: `// Cho tứ giác ABCD nội tiếp đường tròn (O; R), 4 đỉnh theo đúng thứ tự trên
+// đường tròn. Hai đường chéo AC và BD cắt nhau tại E.
+// Tính chất: hai góc đối của tứ giác nội tiếp bù nhau (tổng bằng 180°).
+
+O = (0, 0)
+R = 4
+duongTron = Circle(O, R)
+SetColor(duongTron, "Blue")
+
+A = (R*cos(150°), R*sin(150°))
+B = (R*cos(230°), R*sin(230°))
+C = (R*cos(310°), R*sin(310°))
+D = (R*cos(30°), R*sin(30°))
+
+tuGiac = Polygon(A, B, C, D)
+SetColor(tuGiac, "Green")
+SetFilling(tuGiac, 0.12)
+
+E = Intersect(Line(A, C), Line(B, D))
+SetColor(E, "Red")
+
+duongCheoAC = Segment(A, C)
+duongCheoBD = Segment(B, D)
+SetLineStyle(duongCheoAC, 1)
+SetLineStyle(duongCheoBD, 1)
+
+gocBAD = Angle(B, A, D)
+gocBCD = Angle(B, C, D)
+SetColor(gocBAD, "Purple")
+SetColor(gocBCD, "Orange")
+
+Text("Góc BAD + Góc BCD = 180° (hai góc đối của tứ giác nội tiếp)", (-9, -7), false, false)`
+            },
+            {
+                title: "18. Phương tích của một điểm cố định (minh họa động)",
+                mode: "classic",
+                script: `// Cho đường tròn (O; R) và điểm M cố định ở ngoài đường tròn. Kéo điểm A trên
+// đường tròn để "quay" cát tuyến MAB quanh M - luôn có MA.MB = MO² - R² = MT²
+// (MT là độ dài tiếp tuyến từ M). Đây chính là PHƯƠNG TÍCH của điểm M đối với (O).
+
+O = (0, 0)
+R = 3
+duongTron = Circle(O, R)
+SetColor(duongTron, "Blue")
+
+M = (7, 2)
+
+// Cát tuyến quay quanh M qua điểm A kéo được trên đường tròn
+A = Point(duongTron)
+SetValue(A, (-2, 2.2))
+catTuyen = Line(M, A)
+SetColor(catTuyen, "Green")
+a1 = Intersect(catTuyen, duongTron, 1)
+a2 = Intersect(catTuyen, duongTron, 2)
+B = If(Distance(a1, A) < 0.01, a2, a1)
+
+// Tiếp tuyến từ M (dựng bằng đường tròn đường kính OM)
+I = Midpoint(O, M)
+duongTronPhu = Circle(I, O)
+SetColor(duongTronPhu, "Grey")
+SetLineStyle(duongTronPhu, 1)
+T = Intersect(duongTron, duongTronPhu, 1)
+tiepTuyen = Segment(M, T)
+SetColor(tiepTuyen, "Red")
+SetLineThickness(tiepTuyen, 3)
+
+Text("MA.MB = " + (Distance(M,A) * Distance(M,B)), (-9, 8), false, false)
+Text("MT² = " + (Distance(M,T))^2, (-9, 7), false, false)
+Text("MO² - R² = " + ((Distance(M,O))^2 - R^2), (-9, 6), false, false)
+Text("Ba giá trị trên luôn bằng nhau dù kéo A đi đâu trên đường tròn", (-9, 5), false, false)`
+            },
+            {
+                title: "19. Hình chóp tam giác đều S.ABC",
+                mode: "3d",
+                script: `// Hình chóp tam giác đều S.ABC: đáy ABC là tam giác đều, chân đường cao G
+// trùng trọng tâm đáy, SG vuông góc với mặt đáy.
+
+A = (0, 0, 0)
+B = (4, 0, 0)
+C = (2, 2*sqrt(3), 0)
+day = Polygon(A, B, C)
+SetColor(day, "Cyan")
+SetFilling(day, 0.3)
+
+G = ( (x(A)+x(B)+x(C))/3, (y(A)+y(B)+y(C))/3, 0 )
+S = (x(G), y(G), 5)
+
+matBenSAB = Polygon(S, A, B)
+matBenSBC = Polygon(S, B, C)
+matBenSCA = Polygon(S, C, A)
+SetColor(matBenSAB, "Yellow")
+SetColor(matBenSBC, "Yellow")
+SetColor(matBenSCA, "Yellow")
+SetFilling(matBenSAB, 0.2)
+SetFilling(matBenSBC, 0.2)
+SetFilling(matBenSCA, 0.2)
+
+duongCao = Segment(S, G)
+SetColor(duongCao, "Red")
+SetLineStyle(duongCao, 1)
+
+Text("Hình chóp tam giác đều S.ABC (SG vuông góc đáy tại trọng tâm G)", (-9, 8), false, false)`
+            },
+            {
+                title: "20. Hình chóp tứ giác đều S.ABCD",
+                mode: "3d",
+                script: `// Hình chóp tứ giác đều S.ABCD: đáy ABCD là hình vuông, O là giao 2 đường
+// chéo (tâm đáy), SO vuông góc với mặt đáy.
+
+A = (0, 0, 0)
+B = (4, 0, 0)
+C = (4, 4, 0)
+D = (0, 4, 0)
+day = Polygon(A, B, C, D)
+SetColor(day, "Cyan")
+SetFilling(day, 0.3)
+
+O = Intersect(Segment(A, C), Segment(B, D))
+S = (x(O), y(O), 6)
+
+matBenSAB = Polygon(S, A, B)
+matBenSBC = Polygon(S, B, C)
+matBenSCD = Polygon(S, C, D)
+matBenSDA = Polygon(S, D, A)
+SetColor(matBenSAB, "Yellow")
+SetColor(matBenSBC, "Yellow")
+SetColor(matBenSCD, "Yellow")
+SetColor(matBenSDA, "Yellow")
+SetFilling(matBenSAB, 0.2)
+SetFilling(matBenSBC, 0.2)
+SetFilling(matBenSCD, 0.2)
+SetFilling(matBenSDA, 0.2)
+
+duongCao = Segment(S, O)
+SetColor(duongCao, "Red")
+SetLineStyle(duongCao, 1)
+
+Text("Hình chóp tứ giác đều S.ABCD (SO vuông góc đáy tại tâm O)", (-9, 8), false, false)`
+            },
+            {
+                title: "21. Hình lăng trụ đứng tam giác ABC.A'B'C'",
+                mode: "3d",
+                script: `// Hình lăng trụ đứng tam giác ABC.A1B1C1 (A1, B1, C1 đóng vai trò A', B', C'):
+// hai đáy ABC và A1B1C1 là 2 tam giác bằng nhau nằm trên 2 mặt phẳng song song,
+// các cạnh bên AA1, BB1, CC1 vuông góc với đáy và bằng nhau.
+
+A = (0, 0, 0)
+B = (4, 0, 0)
+C = (1, 3, 0)
+h = 5
+
+A1 = (x(A), y(A), h)
+B1 = (x(B), y(B), h)
+C1 = (x(C), y(C), h)
+
+day1 = Polygon(A, B, C)
+day2 = Polygon(A1, B1, C1)
+SetColor(day1, "Cyan")
+SetColor(day2, "Cyan")
+SetFilling(day1, 0.3)
+SetFilling(day2, 0.3)
+
+canhBenAA = Segment(A, A1)
+canhBenBB = Segment(B, B1)
+canhBenCC = Segment(C, C1)
+SetColor(canhBenAA, "Red")
+SetColor(canhBenBB, "Red")
+SetColor(canhBenCC, "Red")
+
+matBenABBA = Polygon(A, B, B1, A1)
+matBenBCCB = Polygon(B, C, C1, B1)
+matBenCAAC = Polygon(C, A, A1, C1)
+SetColor(matBenABBA, "Yellow")
+SetColor(matBenBCCB, "Yellow")
+SetColor(matBenCAAC, "Yellow")
+SetFilling(matBenABBA, 0.15)
+SetFilling(matBenBCCB, 0.15)
+SetFilling(matBenCAAC, 0.15)
+
+Text("Lăng trụ đứng tam giác ABC.A'B'C' - các mặt bên đều là hình chữ nhật", (-9, 8), false, false)`
+            },
+            {
+                title: "22. Hình lập phương ABCD.A'B'C'D'",
+                mode: "3d",
+                script: `// Hình lập phương ABCD.A1B1C1D1 cạnh a (A1..D1 đóng vai trò A'..D') - hình quen
+// thuộc nhất để minh họa đường thẳng vuông góc mặt phẳng, góc giữa 2 mặt phẳng,
+// khoảng cách trong không gian.
+
+a = 4
+A = (0, 0, 0)
+B = (a, 0, 0)
+C = (a, a, 0)
+D = (0, a, 0)
+A1 = (0, 0, a)
+B1 = (a, 0, a)
+C1 = (a, a, a)
+D1 = (0, a, a)
+
+day = Polygon(A, B, C, D)
+nap = Polygon(A1, B1, C1, D1)
+SetColor(day, "Cyan")
+SetColor(nap, "Cyan")
+SetFilling(day, 0.25)
+SetFilling(nap, 0.25)
+
+matTruoc = Polygon(A, B, B1, A1)
+matPhai = Polygon(B, C, C1, B1)
+matSau = Polygon(C, D, D1, C1)
+matTrai = Polygon(D, A, A1, D1)
+SetColor(matTruoc, "Yellow")
+SetColor(matPhai, "Yellow")
+SetColor(matSau, "Yellow")
+SetColor(matTrai, "Yellow")
+SetFilling(matTruoc, 0.12)
+SetFilling(matPhai, 0.12)
+SetFilling(matSau, 0.12)
+SetFilling(matTrai, 0.12)
+
+// Đường chéo AC1 - hay dùng để tính góc, khoảng cách trong không gian
+duongCheo = Segment(A, C1)
+SetColor(duongCheo, "Red")
+SetLineThickness(duongCheo, 3)
+
+Text("Hình lập phương ABCD.A'B'C'D' cạnh a = " + a, (-9, 8), false, false)`
+            },
+            {
+                title: "23. Đường thẳng song song mặt phẳng (đường trung bình)",
+                mode: "3d",
+                script: `// Cho hình chóp S.ABCD đáy là hình bình hành. M, N lần lượt là trung điểm SA,
+// SB. Vì MN là đường trung bình tam giác SAB nên MN // AB, suy ra MN // mp(ABCD).
+
+A = (0, 0, 0)
+B = (5, 0, 0)
+C = (6, 4, 0)
+D = (1, 4, 0)
+day = Polygon(A, B, C, D)
+SetColor(day, "Cyan")
+SetFilling(day, 0.25)
+
+S = (2, 1, 6)
+canhSA = Segment(S, A)
+canhSB = Segment(S, B)
+canhSC = Segment(S, C)
+canhSD = Segment(S, D)
+
+M = Midpoint(S, A)
+N = Midpoint(S, B)
+duongMN = Segment(M, N)
+SetColor(duongMN, "Red")
+SetLineThickness(duongMN, 3)
+
+Text("M, N là trung điểm SA, SB nên MN // AB (đường trung bình tam giác SAB)", (-9, 8), false, false)
+Text("=> MN // mp(ABCD) (MN không nằm trong (ABCD) nhưng song song 1 đường trong đó)", (-9, 7), false, false)`
+            },
+            {
+                title: "24. Thiết diện của hình chóp cắt bởi mặt phẳng",
+                mode: "3d",
+                script: `// Cho hình chóp S.ABCD đáy là hình bình hành, M là trung điểm SC. Xác định
+// thiết diện của hình chóp cắt bởi mặt phẳng (ABM). Vì (ABM) chứa AB // CD nên
+// giao tuyến của (ABM) với mặt (SCD) là đường thẳng qua M song song AB, cắt SD
+// tại N (N cũng là trung điểm SD).
+
+A = (0, 0, 0)
+B = (5, 0, 0)
+C = (6, 4, 0)
+D = (1, 4, 0)
+day = Polygon(A, B, C, D)
+SetColor(day, "Cyan")
+SetFilling(day, 0.2)
+
+S = (2, 1, 6)
+canhSA = Segment(S, A)
+canhSB = Segment(S, B)
+canhSC = Segment(S, C)
+canhSD = Segment(S, D)
+
+M = Midpoint(S, C)
+matCat = Plane(A, B, M)
+N = Intersect(Line(S, D), matCat)
+
+thietDien = Polygon(A, B, M, N)
+SetColor(thietDien, "Orange")
+SetFilling(thietDien, 0.5)
+
+Text("Thiết diện cắt bởi (ABM), M là trung điểm SC, là tứ giác ABMN", (-9, 8), false, false)
+Text("(N là giao điểm SD với (ABM); MN // AB // CD)", (-9, 7), false, false)`
+            },
+            {
+                title: "25. Góc giữa đường thẳng và mặt phẳng",
+                mode: "3d",
+                script: `// Cho hình chóp S.ABCD, đáy ABCD là hình vuông, SA vuông góc với đáy.
+// Tính góc giữa SC và mặt phẳng (ABCD): vì SA vuông góc đáy nên hình chiếu của
+// SC lên (ABCD) là AC => góc giữa SC và (ABCD) chính là góc SCA.
+
+A = (0, 0, 0)
+B = (5, 0, 0)
+C = (5, 5, 0)
+D = (0, 5, 0)
+day = Polygon(A, B, C, D)
+SetColor(day, "Cyan")
+SetFilling(day, 0.25)
+
+S = (0, 0, 6)
+canhSA = Segment(S, A)
+canhSB = Segment(S, B)
+canhSC = Segment(S, C)
+canhSD = Segment(S, D)
+SetColor(canhSA, "Red")
+SetLineThickness(canhSA, 3)
+
+duongCheoAC = Segment(A, C)
+SetLineStyle(duongCheoAC, 1)
+
+gocSCA = Angle(S, C, A)
+SetColor(gocSCA, "Orange")
+
+Text("SA vuông góc (ABCD) => hình chiếu của SC trên (ABCD) là AC", (-9, 8), false, false)
+Text("Góc giữa SC và (ABCD) = góc SCA = " + gocSCA, (-9, 7), false, false)`
+            },
+            {
+                title: "26. Góc giữa hai mặt phẳng",
+                mode: "3d",
+                script: `// Hình chóp S.ABCD, đáy ABCD là hình vuông, SA vuông góc với đáy. Tính góc
+// giữa (SBC) và (ABCD): vì AB vuông góc BC (đáy vuông) và SA vuông góc BC (SA
+// vuông góc đáy) nên BC vuông góc (SAB), suy ra BC vuông góc SB.
+// Vậy góc giữa (SBC) và (ABCD) chính là góc SBA.
+
+A = (0, 0, 0)
+B = (5, 0, 0)
+C = (5, 5, 0)
+D = (0, 5, 0)
+day = Polygon(A, B, C, D)
+SetColor(day, "Cyan")
+SetFilling(day, 0.2)
+
+S = (0, 0, 6)
+canhSA = Segment(S, A)
+canhSB = Segment(S, B)
+canhSC = Segment(S, C)
+canhSD = Segment(S, D)
+SetColor(canhSA, "Red")
+
+matSBC = Polygon(S, B, C)
+SetColor(matSBC, "Yellow")
+SetFilling(matSBC, 0.3)
+
+gocSBA = Angle(S, B, A)
+SetColor(gocSBA, "Orange")
+
+Text("Góc giữa (SBC) và (ABCD) = góc SBA = " + gocSBA, (-9, 8), false, false)
+Text("(vì BC vuông góc (SAB) nên BC vuông góc SB và BC vuông góc AB)", (-9, 7), false, false)`
+            },
+            {
+                title: "27. Khoảng cách từ một điểm đến một mặt phẳng",
+                mode: "3d",
+                script: `// Cho hình chóp S.ABCD, đáy ABCD là hình vuông, SA vuông góc với đáy.
+// Tính khoảng cách từ A đến mặt phẳng (SBD).
+
+A = (0, 0, 0)
+B = (5, 0, 0)
+C = (5, 5, 0)
+D = (0, 5, 0)
+day = Polygon(A, B, C, D)
+SetColor(day, "Cyan")
+SetFilling(day, 0.2)
+
+S = (0, 0, 6)
+canhSA = Segment(S, A)
+canhSB = Segment(S, B)
+canhSC = Segment(S, C)
+canhSD = Segment(S, D)
+SetColor(canhSA, "Red")
+
+matSBD = Polygon(S, B, D)
+SetColor(matSBD, "Yellow")
+SetFilling(matSBD, 0.3)
+
+// Dựng chân đường vuông góc H từ A đến mặt phẳng (SBD)
+matPhangSBD = Plane(S, B, D)
+duongVuongGoc = PerpendicularLine(A, matPhangSBD)
+H = Intersect(duongVuongGoc, matPhangSBD)
+
+doanAH = Segment(A, H)
+SetColor(doanAH, "Green")
+SetLineThickness(doanAH, 3)
+
+Text("Khoảng cách từ A đến (SBD) = AH = " + Distance(A, H), (-9, 8), false, false)`
+            },
+            {
+                title: "28. Hình chóp đáy hình thang (minh họa song song)",
+                mode: "3d",
+                script: `// Hình chóp S.ABCD có đáy ABCD là hình thang (AB // CD, AB = 2CD). Dạng đáy
+// hình thang thường dùng để minh họa CD // mp(SAB) và giao tuyến của 2 mặt phẳng
+// (SAB), (SCD) là đường thẳng qua S song song AB, CD.
+
+A = (0, 0, 0)
+B = (6, 0, 0)
+C = (4.5, 4, 0)
+D = (1.5, 4, 0)
+day = Polygon(A, B, C, D)
+SetColor(day, "Cyan")
+SetFilling(day, 0.25)
+
+S = (3, 1, 6)
+canhSA = Segment(S, A)
+canhSB = Segment(S, B)
+canhSC = Segment(S, C)
+canhSD = Segment(S, D)
+
+matSAB = Polygon(S, A, B)
+SetColor(matSAB, "Yellow")
+SetFilling(matSAB, 0.2)
+
+Text("Đáy ABCD là hình thang (AB // CD) => CD // mp(SAB)", (-9, 8), false, false)
+Text("Giao tuyến của (SAB) và (SCD) là đường thẳng qua S song song AB, CD", (-9, 7), false, false)`
+            },
+            {
+                title: "29. Định lí côsin trong tam giác",
+                mode: "classic",
+                script: `// Định lí côsin: a² = b² + c² - 2bc.cosA (áp dụng tương tự cho cạnh b, c).
+// Kéo A, B, C để kiểm chứng hệ thức luôn đúng với mọi tam giác.
+
+A = (0, 3)
+B = (-3, -1)
+C = (4, -1)
+
+tamGiac = Polygon(A, B, C)
+SetColor(tamGiac, "Cyan")
+SetFilling(tamGiac, 0.2)
+
+a = Distance(B, C)
+b = Distance(A, C)
+c = Distance(A, B)
+gocA = Angle(B, A, C)
+
+Text("a = BC = " + a, (-9, 8), false, false)
+Text("b² + c² - 2bc.cosA = " + (b^2 + c^2 - 2*b*c*cos(gocA)), (-9, 7), false, false)
+Text("a² = " + a^2, (-9, 6), false, false)`
+            },
+            {
+                title: "30. Định lí sin và đường tròn ngoại tiếp",
+                mode: "classic",
+                script: `// Định lí sin: a/sinA = b/sinB = c/sinC = 2R (R là bán kính đường tròn ngoại
+// tiếp tam giác ABC). Kéo A, B, C để xem tỉ số này luôn không đổi, bằng 2R.
+
+A = (0, 4)
+B = (-3.5, -1.5)
+C = (3.5, -1.5)
+
+tamGiac = Polygon(A, B, C)
+SetColor(tamGiac, "Cyan")
+SetFilling(tamGiac, 0.2)
+
+duongTron = Circle(A, B, C)
+SetColor(duongTron, "Blue")
+R = Radius(duongTron)
+
+a = Distance(B, C)
+gocA = Angle(B, A, C)
+
+Text("a/sinA = " + (a / sin(gocA)), (-9, 8), false, false)
+Text("2R = " + (2 * R), (-9, 7), false, false)`
+            },
+            {
+                title: "31. Vectơ - tổng hai vectơ (quy tắc 3 điểm)",
+                mode: "classic",
+                script: `// Tổng hai vectơ theo quy tắc 3 điểm: vectơ AB + vectơ BC = vectơ AC.
+// Kéo A, B, C để kiểm chứng tọa độ luôn khớp.
+
+A = (-4, -2)
+B = (0, 3)
+C = (4, -1)
+
+u = Vector(A, B)
+v = Vector(B, C)
+w = Vector(A, C)
+SetColor(u, "Red")
+SetColor(v, "Blue")
+SetColor(w, "Green")
+SetLineThickness(w, 4)
+
+Text("vectơ AB + vectơ BC = vectơ AC (quy tắc 3 điểm)", (-9, 8), false, false)
+Text("Tọa độ AB + BC = (" + (x(u)+x(v)) + " ; " + (y(u)+y(v)) + ")", (-9, 7), false, false)
+Text("Tọa độ AC = (" + x(w) + " ; " + y(w) + ")", (-9, 6), false, false)`
+            },
+            {
+                title: "32. Tích vô hướng của hai vectơ",
+                mode: "classic",
+                script: `// Tích vô hướng: vectơ u . vectơ v = |u|.|v|.cos(u,v). Kéo A, B để kiểm chứng
+// (và để ý: u vuông góc v khi tích vô hướng bằng 0).
+
+O = (0, 0)
+A = (4, 1)
+B = (1, 3)
+
+u = Vector(O, A)
+v = Vector(O, B)
+SetColor(u, "Red")
+SetColor(v, "Blue")
+
+gocUV = Angle(u, v)
+tichVoHuong = Dot(u, v)
+
+Text("u.v (tính bằng lệnh Dot) = " + tichVoHuong, (-9, 8), false, false)
+Text("|u|.|v|.cos(u,v) = " + (Distance(O,A) * Distance(O,B) * cos(gocUV)), (-9, 7), false, false)`
+            },
+            {
+                title: "33. Phương trình đường thẳng - tham số và tổng quát",
+                mode: "classic",
+                script: `// Đường thẳng d qua điểm M(-5, 5), có vectơ chỉ phương u = (4, -3).
+// Phương trình tham số: x = -5 + 4t , y = 5 - 3t.
+// Phương trình tổng quát suy ra từ vectơ pháp tuyến n = (3, 4) (vuông góc u):
+// 3(x+5) + 4(y-5) = 0  <=>  3x + 4y - 5 = 0
+
+M = (-5, 5)
+u = Vector((4, -3))
+d: X = M + t*u
+SetColor(d, "Blue")
+SetLineThickness(d, 3)
+
+// Kiểm chứng: đường thẳng viết ở dạng phương trình tổng quát phải trùng với d
+kiemTra: 3x + 4y - 5 = 0
+SetColor(kiemTra, "Red")
+SetLineStyle(kiemTra, 1)
+
+Text("Phương trình tham số: x = -5 + 4t , y = 5 - 3t", (-9, 8), false, false)
+Text("Phương trình tổng quát: 3x + 4y - 5 = 0", (-9, 7), false, false)`
+            },
+            {
+                title: "34. Vị trí tương đối của hai đường thẳng",
+                mode: "classic",
+                script: `// Hai đường thẳng d1, d2 cắt nhau tại A. Tính góc giữa d1, d2 và khoảng cách
+// từ một điểm M đến d1.
+
+d1: x - 2y + 3 = 0
+d2: 2x + y - 4 = 0
+SetColor(d1, "Blue")
+SetColor(d2, "Red")
+
+A = Intersect(d1, d2)
+gocD1D2 = Angle(d1, d2)
+
+M = (5, 5)
+H = Intersect(PerpendicularLine(M, d1), d1)
+doanMH = Segment(M, H)
+SetColor(doanMH, "Green")
+SetLineStyle(doanMH, 1)
+
+Text("Giao điểm A = (" + x(A) + " ; " + y(A) + ")", (-9, 8), false, false)
+Text("Góc giữa d1 và d2 = " + gocD1D2, (-9, 7), false, false)
+Text("Khoảng cách từ M đến d1 = MH = " + Distance(M, H), (-9, 6), false, false)`
+            },
+            {
+                title: "35. Phương trình đường tròn và tiếp tuyến",
+                mode: "classic",
+                script: `// Đường tròn tâm I(1,2), bán kính R = 3: phương trình (x-1)² + (y-2)² = 9.
+// Tiếp tuyến của đường tròn tại điểm A thuộc đường tròn (kéo A để xoay tiếp tuyến).
+
+duongTron: (x-1)^2 + (y-2)^2 = 9
+SetColor(duongTron, "Blue")
+
+I = Center(duongTron)
+A = Point(duongTron)
+SetValue(A, (4, 2))
+
+tiepTuyen = Tangent(A, duongTron)
+SetColor(tiepTuyen, "Red")
+SetLineThickness(tiepTuyen, 3)
+
+Text("Phương trình đường tròn: (x-1)² + (y-2)² = 9", (-9, 8), false, false)
+Text("Tiếp tuyến tại A luôn vuông góc với bán kính IA", (-9, 7), false, false)`
+            },
+            {
+                title: "36. Ba đường conic - Elip",
+                mode: "classic",
+                script: `// Elip có 2 tiêu điểm F1, F2 và MF1 + MF2 = 2a không đổi với mọi điểm M trên
+// elip. Kéo điểm M trên elip để kiểm chứng.
+
+F1 = (-3, 0)
+F2 = (3, 0)
+a = 5
+elip = Ellipse(F1, F2, a)
+SetColor(elip, "Blue")
+SetFilling(elip, 0.1)
+
+M = Point(elip)
+SetValue(M, (0, 4))
+
+doanMF1 = Segment(M, F1)
+doanMF2 = Segment(M, F2)
+SetColor(doanMF1, "Red")
+SetColor(doanMF2, "Green")
+
+Text("MF1 + MF2 = " + (Distance(M,F1) + Distance(M,F2)), (-9, 8), false, false)
+Text("2a = " + (2*a), (-9, 7), false, false)`
+            },
+            {
+                title: "37. Ba đường conic - Hyperbol",
+                mode: "classic",
+                script: `// Hyperbol có 2 tiêu điểm F1, F2 và |MF1 - MF2| = 2a không đổi với mọi điểm M
+// trên hyperbol. Kéo điểm M trên hyperbol để kiểm chứng.
+
+F1 = (-5, 0)
+F2 = (5, 0)
+a = 3
+hyperbol = Hyperbola(F1, F2, a)
+SetColor(hyperbol, "Purple")
+
+M = Point(hyperbol)
+SetValue(M, (3, 4))
+
+doanMF1 = Segment(M, F1)
+doanMF2 = Segment(M, F2)
+SetColor(doanMF1, "Red")
+SetColor(doanMF2, "Green")
+
+Text("|MF1 - MF2| = " + abs(Distance(M,F1) - Distance(M,F2)), (-9, 8), false, false)
+Text("2a = " + (2*a), (-9, 7), false, false)`
+            },
+            {
+                title: "38. Ba đường conic - Parabol",
+                mode: "classic",
+                script: `// Parabol có tiêu điểm F và đường chuẩn d. Với mọi điểm M trên parabol,
+// khoảng cách MF = khoảng cách từ M đến đường chuẩn d. Kéo M để kiểm chứng.
+
+F = (0, 2)
+duongChuan: y = -2
+SetColor(duongChuan, "Grey")
+SetLineStyle(duongChuan, 1)
+
+parabol = Parabola(F, duongChuan)
+SetColor(parabol, "Orange")
+
+M = Point(parabol)
+SetValue(M, (4, 2))
+
+H = Intersect(PerpendicularLine(M, duongChuan), duongChuan)
+doanMF = Segment(M, F)
+doanMH = Segment(M, H)
+SetColor(doanMF, "Red")
+SetColor(doanMH, "Green")
+
+Text("MF = " + Distance(M, F), (-9, 8), false, false)
+Text("Khoảng cách từ M đến đường chuẩn = MH = " + Distance(M, H), (-9, 7), false, false)`
             }
         ];
 
@@ -1918,6 +2877,106 @@ SetOnClick[btnDiChuyenB, "SetValue(t, -8) \\n StartAnimation(t)"]`
         codeModalOverlay.addEventListener('click', (e) => { if (e.target === codeModalOverlay) closeCodeModal(); });
         codeModalInput.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeCodeModal();
+        });
+
+        // --- Modal "Xuất mã theo hình đang có trên màn hình" (kể cả sửa bằng tay) ---
+        // Đọc lại TỪNG đối tượng đang có trong construction hiện tại (đúng thứ tự dựng hình,
+        // qua getObjectName(i) - API tài liệu hoá là "tên đối tượng thứ i của construction"),
+        // rồi lấy lại lệnh định nghĩa của nó bằng getCommandString(name, false): tham số thứ 2
+        // = false để lấy tên lệnh tiếng Anh + cú pháp ngoặc vuông [] gốc của GeoGebra (chạy
+        // được ngay bằng evalCommand, không phụ thuộc bước chuyển ngoặc tự động của công cụ,
+        // và không phụ thuộc tên lệnh có dấu tiếng Việt). Với đối tượng tự do (điểm, số...) đã
+        // bị kéo/sửa bằng tay, getCommandString trả về giá trị TỌA ĐỘ/GIÁ TRỊ HIỆN TẠI (đúng
+        // như Algebra View đang hiển thị) - nên đoạn mã xuất ra phản ánh đúng hình đã chỉnh sửa.
+        // Nút bấm có gán SetOnClick thì KHÔNG đọc lại được (GeoGebra Apps API không có hàm đọc
+        // ngược click-script), nên được đánh dấu bằng dòng chú thích để giáo viên tự thêm lại.
+        const btnExportCode = document.getElementById('btnExportCode');
+        const exportModalOverlay = document.getElementById('exportModalOverlay');
+        const exportModalOutput = document.getElementById('exportModalOutput');
+        const exportModalWarning = document.getElementById('exportModalWarning');
+        const exportModalEmpty = document.getElementById('exportModalEmpty');
+        const exportModalClose = document.getElementById('exportModalClose');
+        const exportModalCopy = document.getElementById('exportModalCopy');
+        const exportModalApply = document.getElementById('exportModalApply');
+
+        function buildExportedScript() {
+            if (!ggbAppletAPI) return { text: '', total: 0, unresolved: [] };
+            let total = 0;
+            try { total = ggbAppletAPI.getObjectNumber(); } catch (e) { total = 0; }
+            const viewNum = (currentMode === '3d') ? -1 : 1;
+            const lines = [];
+            const unresolved = [];
+            for (let i = 0; i < total; i++) {
+                let name = '';
+                try { name = ggbAppletAPI.getObjectName(i); } catch (e) { name = ''; }
+                if (!name) continue;
+
+                let cmd = '';
+                try { cmd = ggbAppletAPI.getCommandString(name, false) || ''; } catch (e) { cmd = ''; }
+                if (cmd.trim()) {
+                    lines.push(cmd);
+                } else {
+                    lines.push(`// [Không tự xuất được lệnh cho đối tượng "${name}" - có thể là nút bấm có gán SetOnClick, vui lòng tự thêm lại nếu cần]`);
+                    unresolved.push(name);
+                }
+
+                let visible = true;
+                try { visible = ggbAppletAPI.getVisible(name); } catch (e) { visible = true; }
+                if (visible === false) {
+                    lines.push(`SetVisibleInView(${name}, ${viewNum}, false)`);
+                }
+            }
+            return { text: lines.join('\n'), total, unresolved };
+        }
+
+        function openExportModal() {
+            if (!ggbAppletAPI) { showStatus('GeoGebra chưa tải xong, chưa thể xuất mã!', true); return; }
+            const { text, total, unresolved } = buildExportedScript();
+            exportModalOutput.value = text;
+            exportModalWarning.classList.toggle('hidden', unresolved.length === 0);
+            exportModalEmpty.classList.toggle('hidden', total > 0);
+            exportModalOverlay.classList.remove('hidden');
+            exportModalOverlay.classList.add('flex');
+            exportModalOutput.focus();
+            exportModalOutput.select();
+        }
+
+        function closeExportModal() {
+            exportModalOverlay.classList.add('hidden');
+            exportModalOverlay.classList.remove('flex');
+        }
+
+        async function copyExportModalOutput() {
+            if (!exportModalOutput.value.trim()) return;
+            try {
+                await navigator.clipboard.writeText(exportModalOutput.value);
+                showStatus('Đã sao chép mã vào bộ nhớ tạm.');
+            } catch (e) {
+                exportModalOutput.focus();
+                exportModalOutput.select();
+                try {
+                    document.execCommand('copy');
+                    showStatus('Đã sao chép mã vào bộ nhớ tạm.');
+                } catch (e2) {
+                    showStatus('Không tự sao chép được — hãy tự chọn và Ctrl+C đoạn mã.', true);
+                }
+            }
+        }
+
+        function applyExportModalOutput() {
+            if (!exportModalOutput.value.trim()) { closeExportModal(); return; }
+            scriptInput.value = exportModalOutput.value;
+            closeExportModal();
+            showStatus('Đã ghi mã theo đúng hình hiện tại vào ô Code — có thể "Lưu vào thư viện" hoặc chỉnh sửa tiếp để áp dụng cho hình khác.');
+        }
+
+        btnExportCode.addEventListener('click', openExportModal);
+        exportModalClose.addEventListener('click', closeExportModal);
+        exportModalCopy.addEventListener('click', copyExportModalOutput);
+        exportModalApply.addEventListener('click', applyExportModalOutput);
+        exportModalOverlay.addEventListener('click', (e) => { if (e.target === exportModalOverlay) closeExportModal(); });
+        exportModalOutput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeExportModal();
         });
 
         // --- Đồng bộ Google Sheet qua Google Apps Script Web App ---
